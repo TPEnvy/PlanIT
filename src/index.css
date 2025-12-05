@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+/* Optional: you can add your global styles here */
+body {
+  font-family: 'Raleway', sans-serif;
+}
+
