@@ -1,16 +1,20 @@
-# React + Vite
+# Plan-It
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Environment
 
-Currently, two official plugins are available:
+Create `.env` from `.env.example` and provide the Firebase web app values through `VITE_*` variables before running or deploying the client.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Push notifications are optional. Leave `VITE_ENABLE_PUSH_NOTIFICATIONS=false` unless Firebase Cloud Messaging is fully configured for your deployed domain.
 
-## React Compiler
+## Google Sign-In
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+For Google sign-in to work in production, add every deployed domain to Firebase Authentication:
 
-## Expanding the ESLint configuration
+1. Open Firebase Console.
+2. Go to Authentication > Settings > Authorized domains.
+3. Add your production domain and any preview domains you plan to use.
+4. Make sure Google is enabled under Authentication > Sign-in method.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Firebase Hosting
+
+`firebase.json` includes an SPA rewrite so routes such as `/dashboard` and `/tasks/:id` work after deployment instead of returning a 404 on refresh.
