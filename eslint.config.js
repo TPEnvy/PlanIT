@@ -10,7 +10,6 @@ export default defineConfig([
     "google-cloud-sdk/**",
     ".venv/**",
     "ml/**",
-    "public/**",
   ]),
   {
     files: ["src/**/*.{js,jsx}"],
