@@ -9,7 +9,7 @@ import {
   Timestamp,
   getDoc,
 } from "firebase/firestore";
-import { firestore, auth } from "../server.js/firebase";
+import { firestore } from "../server.js/firebase";
 import Navbar from "../components/Navbar";
 import { useAuth } from "../contexts/AuthContext";
 

@@ -124,7 +124,7 @@ export async function recomputeAndSavePatternStats(
     // Persist pattern doc: try update then fallback to set
     try {
       await updateDoc(patternRef, patternData);
-    } catch (err) {
+    } catch {
       // updateDoc fails if doc doesn't exist
       await setDoc(patternRef, patternData);
     }
