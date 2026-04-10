@@ -1,30 +1,41 @@
-// src/server.js/firebase.js
-
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-import { getDatabase } from "firebase/database"; // only if you use Realtime DB
+import { getDatabase } from "firebase/database";
 
-// --- Your real Firebase project config ---
 const firebaseConfig = {
-  apiKey: "AIzaSyArsbLJRI9GFgFRph8Upbpy8fNOCFwTd1A",
-  authDomain: "planit-f2783.firebaseapp.com",
-  projectId: "planit-f2783",
-  storageBucket: "planit-f2783.firebasestorage.app",
-  messagingSenderId: "1016048057274",
-  appId: "1:1016048057274:web:6624e5e859785af6a63b83",
-  measurementId: "G-BPQC3869B9",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-// --- Initialize App ---
+const requiredKeys = [
+  "apiKey",
+  "authDomain",
+  "projectId",
+  "storageBucket",
+  "messagingSenderId",
+  "appId",
+];
+
+const missingKeys = requiredKeys.filter((key) => !firebaseConfig[key]);
+
+if (missingKeys.length) {
+  throw new Error(
+    `Missing Firebase environment variables: ${missingKeys.join(", ")}`
+  );
+}
+
 const app = initializeApp(firebaseConfig);
 
-// --- Cloud Services ---
-export const auth = getAuth(app);           // Cloud Firebase Auth
-export const firestore = getFirestore(app); // Cloud Firestore DB
+export const auth = getAuth(app);
+export const firestore = getFirestore(app);
+export const database = getDatabase(app);
+export const isPushNotificationsEnabled =
+  import.meta.env.VITE_ENABLE_PUSH_NOTIFICATIONS === "true";
 
-// Optional (if ever needed):
-export const database = getDatabase(app);   // For Realtime Database (not required)
-
-// --- Default export ---
 export default app;
