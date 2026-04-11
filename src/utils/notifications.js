@@ -20,7 +20,7 @@ export async function showDeviceNotification(title, body) {
 }
 
 export async function createUserNotification(uid, payload) {
-  if (!uid) return null;
+  if (!uid || !firestore) return null;
 
   try {
     return await addDoc(collection(firestore, `users/${uid}/notifications`), {

@@ -22,7 +22,7 @@ export async function recomputeAndSavePatternStats(
   title,
   opts = {}
 ) {
-  if (!userId || !title) return null;
+  if (!userId || !title || !firestore) return null;
 
   const normalizedTitle = normalizeTitle(title);
   const { propagate = true, propagationLimit = 200 } = opts;

@@ -6,7 +6,7 @@ import {
   signInWithPopup,
   signInWithRedirect,
 } from "firebase/auth";
-import { auth } from "../server.js/firebase";
+import { auth, firebaseInitError } from "../server.js/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import PageTransition from "../components/PageTransition";
 
@@ -55,6 +55,11 @@ export default function Login() {
     setError("");
     setMessage("");
 
+    if (!auth) {
+      setError(firebaseInitError || "Firebase auth is unavailable.");
+      return;
+    }
+
     if (!email) {
       setError("Enter your email to reset password.");
       return;
@@ -70,6 +75,11 @@ export default function Login() {
   };
 
   const handleGoogleLogin = async () => {
+    if (!auth) {
+      setError(firebaseInitError || "Firebase auth is unavailable.");
+      return;
+    }
+
     setError("");
     setLoading(true);
 
@@ -116,6 +126,13 @@ export default function Login() {
           <p className="text-gray-600 mb-6 text-sm">
             Login to manage your tasks
           </p>
+
+          {firebaseInitError && (
+            <div className="mb-4 rounded-lg bg-amber-100 text-amber-800 p-3 text-sm">
+              Firebase environment variables are missing on this deployment.
+              The app is using its built-in fallback Firebase config instead.
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 rounded-lg bg-red-100 text-red-700 p-2 text-sm">

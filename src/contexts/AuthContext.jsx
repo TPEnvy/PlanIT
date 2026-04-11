@@ -13,7 +13,7 @@ import {
   sendEmailVerification,
   signOut,
 } from "firebase/auth";
-import { auth } from "../server.js/firebase";
+import { auth, firebaseInitError } from "../server.js/firebase";
 
 // Create context
 const AuthContext = createContext(null);
@@ -30,6 +30,12 @@ export function AuthProvider({ children }) {
 
   // Listen to auth state changes once
   useEffect(() => {
+    if (!auth) {
+      setUser(null);
+      setLoading(false);
+      return undefined;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser || null);
       setLoading(false);
@@ -40,6 +46,10 @@ export function AuthProvider({ children }) {
 
   // Signup with email + password + send verification
   const signup = async (email, password) => {
+    if (!auth) {
+      throw new Error(firebaseInitError || "Firebase auth is unavailable.");
+    }
+
     const cred = await createUserWithEmailAndPassword(auth, email, password);
 
     if (cred.user && !cred.user.emailVerified) {
@@ -55,11 +65,21 @@ export function AuthProvider({ children }) {
 
   // Login
   const login = (email, password) => {
+    if (!auth) {
+      return Promise.reject(
+        new Error(firebaseInitError || "Firebase auth is unavailable.")
+      );
+    }
+
     return signInWithEmailAndPassword(auth, email, password);
   };
 
   // Logout
   const logout = () => {
+    if (!auth) {
+      return Promise.resolve();
+    }
+
     return signOut(auth);
   };
 
@@ -69,6 +89,7 @@ export function AuthProvider({ children }) {
     signup,
     login,
     logout,
+    firebaseError: firebaseInitError,
   };
 
   return (

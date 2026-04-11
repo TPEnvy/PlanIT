@@ -91,6 +91,8 @@ export function NotificationProvider({ children }) {
   };
 
   const runReminder = async (uid, taskId, type, flagName) => {
+    if (!firestore) return;
+
     try {
       const taskRef = doc(firestore, `users/${uid}/tasks/${taskId}`);
       const snap = await getDoc(taskRef);
@@ -115,7 +117,7 @@ export function NotificationProvider({ children }) {
   };
 
   useEffect(() => {
-    if (!user) {
+    if (!user || !firestore) {
       setNotifications([]);
       setLoading(false);
       return;
@@ -145,7 +147,7 @@ export function NotificationProvider({ children }) {
   }, [user]);
 
   useEffect(() => {
-    if (!enablePushNotifications) {
+    if (!enablePushNotifications || !app) {
       return undefined;
     }
 
@@ -170,7 +172,7 @@ export function NotificationProvider({ children }) {
   useEffect(() => {
     clearTimers();
 
-    if (!user) {
+    if (!user || !firestore) {
       return undefined;
     }
 
@@ -243,7 +245,7 @@ export function NotificationProvider({ children }) {
   }, [user]);
 
   const markAsRead = async (notificationId) => {
-    if (!user || !notificationId) return;
+    if (!user || !notificationId || !firestore) return;
 
     try {
       await updateDoc(
@@ -256,7 +258,7 @@ export function NotificationProvider({ children }) {
   };
 
   const markAllAsRead = async () => {
-    if (!user) return;
+    if (!user || !firestore) return;
 
     try {
       const unread = notifications.filter((n) => !n.read);
