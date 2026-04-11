@@ -1,54 +1,46 @@
-// src/utils/patterns.js
-// Utility to compute & persist aggregated pattern stats (adaptiveBoost) for tasks with same normalizedTitle.
-// Safe: includes guards, limited propagation, and catches internal errors.
-
 import {
   collection,
   doc,
   getDocs,
   query,
-  where,
+  serverTimestamp,
   setDoc,
   updateDoc,
-  serverTimestamp,
+  where,
 } from "firebase/firestore";
 import { firestore } from "../server.js/firebase";
 
-/**
- * Recompute & save aggregated pattern statistics for tasks sharing the same normalizedTitle.
- *
- * @param {string} userId - Firebase UID
- * @param {string} normalizedTitle - lowercased + trimmed title key
- * @param {Object} [opts]
- * @param {boolean} [opts.propagate=true] - whether to write adaptiveBoost back to matching tasks
- * @param {number} [opts.propagationLimit=200] - maximum number of task docs to update to avoid quotas
- * @returns {Promise<Object|null>} patternData or null on failure
- */
+function normalizeTitle(title) {
+  return String(title || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
 export async function recomputeAndSavePatternStats(
   userId,
-  normalizedTitle,
+  title,
   opts = {}
 ) {
-  if (!userId || !normalizedTitle) {
-    console.warn("recomputeAndSavePatternStats: missing userId or normalizedTitle");
-    return null;
-  }
+  if (!userId || !title) return null;
 
+  const normalizedTitle = normalizeTitle(title);
   const { propagate = true, propagationLimit = 200 } = opts;
 
-  // Hyper-parameters (tweak to change sensitivity)
-  const MIN_DOCS_FOR_LEARNING = 5; // docs needed for full confidence
-  const SENSITIVITY = 4.0; // completion -> priority scaling
-  const OVERRUN_WEIGHT = 1.0; // overrun -> priority scaling
-  const MAX_BOOST = 3.0; // clamp absolute adaptiveBoost
-  const MIN_MISSES_TO_SUGGEST_SPLIT = 3; // threshold to suggest splitting
+  const MIN_DOCS_FOR_LEARNING = 5;
+  const SENSITIVITY = 4.0;
+  const OVERRUN_WEIGHT = 1.0;
+  const MAX_BOOST = 3.0;
+  const MIN_MISSES_TO_SUGGEST_SPLIT = 3;
 
   try {
     const tasksRef = collection(firestore, `users/${userId}/tasks`);
-    const q = query(tasksRef, where("normalizedTitle", "==", normalizedTitle));
-    const snap = await getDocs(q);
+    const tasksQuery = query(
+      tasksRef,
+      where("normalizedTitle", "==", normalizedTitle)
+    );
+    const snap = await getDocs(tasksQuery);
 
-    // Aggregate across matching tasks
     let totalCompleted = 0;
     let totalMissed = 0;
     let totalActualMinutes = 0;
@@ -56,19 +48,18 @@ export async function recomputeAndSavePatternStats(
     let docCount = 0;
     let foundSplitParent = false;
 
-    for (const d of snap.docs) {
-      const data = d.data() || {};
+    for (const taskSnap of snap.docs) {
+      const data = taskSnap.data() || {};
       docCount += 1;
       totalCompleted += Number(data.completedCount || 0);
       totalMissed += Number(data.missedCount || 0);
       totalActualMinutes += Number(data.totalActualMinutes || 0);
-      if (typeof data.estimatedMinutes === "number") {
-        totalEstimatedMinutes += data.estimatedMinutes;
+      totalEstimatedMinutes += Number(data.estimatedMinutes || 0);
+      if (data.isSplitParent === true) {
+        foundSplitParent = true;
       }
-      if (data.isSplitParent === true) foundSplitParent = true;
     }
 
-    // Derived metrics
     const completionRate =
       totalCompleted + totalMissed === 0
         ? 0
@@ -81,28 +72,22 @@ export async function recomputeAndSavePatternStats(
           : totalActualMinutes
         : totalActualMinutes / Math.max(1, totalEstimatedMinutes);
 
-    // Continuous adaptive boost heuristic
     const rawFromCompletion = (0.5 - completionRate) * SENSITIVITY;
     const rawFromOverrun = (overrunRatio - 1.0) * OVERRUN_WEIGHT;
-    let rawBoost = rawFromCompletion + rawFromOverrun;
-
-    // Confidence scaling (smooth ramp-up)
     const confidence = Math.min(1, Math.sqrt(docCount / MIN_DOCS_FOR_LEARNING));
 
-    let adaptiveBoost = rawBoost * confidence;
+    let adaptiveBoost = (rawFromCompletion + rawFromOverrun) * confidence;
+    adaptiveBoost = Math.max(-MAX_BOOST, Math.min(MAX_BOOST, adaptiveBoost));
+    adaptiveBoost = Math.round(adaptiveBoost * 100) / 100;
 
-    // Clamp & round
-    if (adaptiveBoost > MAX_BOOST) adaptiveBoost = MAX_BOOST;
-    if (adaptiveBoost < -MAX_BOOST) adaptiveBoost = -MAX_BOOST;
-    adaptiveBoost = Math.round(adaptiveBoost * 100) / 100; // 2 decimals
+    const suggestSplit =
+      totalMissed >= MIN_MISSES_TO_SUGGEST_SPLIT && docCount >= 2;
+    const preventNewTasks = suggestSplit && foundSplitParent;
 
-    // Suggest / prevent flags
-    const suggestSplit = totalMissed >= MIN_MISSES_TO_SUGGEST_SPLIT && docCount >= 2;
-    const preventNewTasks =
-      suggestSplit && foundSplitParent && totalMissed >= MIN_MISSES_TO_SUGGEST_SPLIT;
-
-    // Compose pattern doc
-    const patternRef = doc(firestore, `users/${userId}/patterns/${normalizedTitle}`);
+    const patternRef = doc(
+      firestore,
+      `users/${userId}/patterns/${normalizedTitle}`
+    );
     const patternData = {
       normalizedTitle,
       docCount,
@@ -121,40 +106,25 @@ export async function recomputeAndSavePatternStats(
       updatedAt: serverTimestamp(),
     };
 
-    // Persist pattern doc: try update then fallback to set
-    try {
-      await updateDoc(patternRef, patternData);
-    } catch {
-      // updateDoc fails if doc doesn't exist
-      await setDoc(patternRef, patternData);
-    }
+    await setDoc(patternRef, patternData, { merge: true });
 
-    // Optional: propagate adaptiveBoost back to tasks (limited)
-    if (propagate && docCount > 0 && snap.docs.length > 0) {
-      const updates = [];
-      let i = 0;
-      for (const d of snap.docs) {
-        if (i >= propagationLimit) break;
-        const taskId = d.id;
-        const taskRef = doc(firestore, `users/${userId}/tasks/${taskId}`);
-        // update only the adaptiveBoost field
-        updates.push(
-          updateDoc(taskRef, { adaptiveBoost }).catch((e) => {
-            // swallow individual update errors to allow others to proceed
-            console.warn(`Failed updating task ${taskId} with adaptiveBoost:`, e);
-          })
-        );
-        i += 1;
-      }
-      if (updates.length > 0) {
-        // wait for completion of all updates but don't throw on partial failures
-        await Promise.allSettled(updates);
-      }
+    if (propagate && snap.docs.length > 0) {
+      const updates = snap.docs.slice(0, propagationLimit).map((taskSnap) => {
+        const taskRef = doc(firestore, `users/${userId}/tasks/${taskSnap.id}`);
+        return updateDoc(taskRef, { adaptiveBoost }).catch((error) => {
+          console.warn(
+            `Failed updating task ${taskSnap.id} with adaptiveBoost:`,
+            error
+          );
+        });
+      });
+
+      await Promise.allSettled(updates);
     }
 
     return patternData;
-  } catch (err) {
-    console.error("recomputeAndSavePatternStats error:", err);
+  } catch (error) {
+    console.error("recomputeAndSavePatternStats error:", error);
     return null;
   }
 }

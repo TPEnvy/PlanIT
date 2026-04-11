@@ -1,6 +1,8 @@
 // src/pages/Tasks.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import TaskCard from "../components/TaskCard";
+import { breakLabel } from "../utils/taskHelpers";
 import {
   collection,
   onSnapshot,
@@ -15,6 +17,7 @@ import {
 import { firestore } from "../server.js/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import Navbar from "../components/Navbar";
+import PageTransition from "../components/PageTransition";
 
 /* -------------------- helpers -------------------- */
 
@@ -65,35 +68,54 @@ function daysInMonthLocal(date) {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 }
 
-// status calculation (completed / missed / pending) — matches TaskDetail logic
-function getStatus(task, now) {
-  const completed =
-    task.finalized === true ||
-    task.status === "completed" ||
-    (Number(task.completedCount || 0) > 0);
-  if (completed) return "completed";
+function merge(left, right) {
+  const result = [];
+  let i = 0;
+  let j = 0;
 
-  const missed =
-    task.status === "missed" || Number(task.missedCount || 0) > 0;
-  if (missed) return "missed";
+  while (i < left.length && j < right.length) {
+    const leftPriority = left[i].priorityScore ?? 0;
+    const rightPriority = right[j].priorityScore ?? 0;
 
-  const due = safeDate(task.dueDate);
-  if (due) {
-    const endOfDue = new Date(due);
-    endOfDue.setHours(23, 59, 59, 999);
-    if (endOfDue < now) return "missed";
+    if (leftPriority >= rightPriority) {
+      result.push(left[i]);
+      i++;
+    } else {
+      result.push(right[j]);
+      j++;
+    }
   }
-  return "pending";
+
+  return [...result, ...left.slice(i), ...right.slice(j)];
 }
 
-function breakLabel(minutes) {
-  if (!minutes || minutes <= 0) return null;
-  if (minutes < 60) return `${minutes} min`;
-  const hours = minutes / 60;
-  if (hours < 24) return `${hours.toFixed(hours % 1 === 0 ? 0 : 1)} h`;
-  const days = minutes / 1440;
-  return `${days.toFixed(days % 1 === 0 ? 0 : 1)} day(s)`;
+function mergeSort(tasks) {
+  if (tasks.length <= 1) return tasks;
+
+  const mid = Math.floor(tasks.length / 2);
+  const left = mergeSort(tasks.slice(0, mid));
+  const right = mergeSort(tasks.slice(mid));
+
+  return merge(left, right);
 }
+
+// status calculation (completed / missed / pending) — matches TaskDetail logic
+  function getStatus(task, now) {
+    if (task.status === "completed") return "completed";
+    if (task.status === "missed") return "missed";
+
+    if (Number(task.completedCount || 0) > 0) return "completed";
+    if (Number(task.missedCount || 0) > 0) return "missed";
+
+    const due = safeDate(task.dueDate);
+    if (due) {
+      const endOfDue = new Date(due);
+      endOfDue.setHours(23, 59, 59, 999);
+      if (endOfDue < now) return "missed";
+    }
+
+    return "pending";
+  }
 
 /* -------------------- component -------------------- */
 
@@ -186,21 +208,32 @@ export default function Tasks() {
     return () => unsub();
   }, [user, authLoading]);
 
-  const now = new Date();
+  const now = useMemo(() => new Date(), []);
 
   // split tasks into scheduled vs todo using local date logic
-  const scheduledTasks = useMemo(
-    () => tasks.filter((t) => !!safeDate(t.dueDate)),
-    [tasks]
-  );
-  const todoTasks = useMemo(() => tasks.filter((t) => !safeDate(t.dueDate)), [tasks]);
+  const { scheduledTasks, todoTasks } = useMemo(() => {
+    const scheduled = [];
+    const todo = [];
+
+    for (const t of tasks) {
+      if (safeDate(t.dueDate)) {
+        scheduled.push(t);
+      } else {
+        todo.push(t);
+      }
+    }
+
+    return { scheduledTasks: scheduled, todoTasks: todo };
+  }, [tasks]);
 
   // calendar dots: mark days covered by scheduled tasks using local date keys
   // IMPORTANT: only mark **active** scheduled tasks (not finalized/completed/missed)
   const tasksByDate = useMemo(() => {
     const map = {};
     scheduledTasks.forEach((task) => {
-      // skip finalized tasks so calendar doesn't show dots for already completed/missed ones
+
+      if (!task.startDate && !task.dueDate) return;
+
       const finalized =
         task.finalized === true ||
         task.status === "completed" ||
@@ -269,14 +302,33 @@ export default function Tasks() {
 
   // Apply status filter (default 'pending' hides completed/missed)
   const visibleTasks = useMemo(() => {
+
     if (viewMode === "floating") return baseVisibleTasks; // to-do tasks: show all by default
 
     if (statusFilter === "all") return baseVisibleTasks;
     return baseVisibleTasks.filter((task) => getStatus(task, now) === statusFilter);
-  }, [baseVisibleTasks, statusFilter, viewMode, now]);
+  },
+   [baseVisibleTasks, statusFilter, viewMode, now]);
+
+  const rankedTasks = useMemo(() => {
+
+    if (viewMode !== "scheduled") return visibleTasks;
+
+    if (visibleTasks.length <= 1) return visibleTasks;
+
+    return mergeSort([...visibleTasks]);
+
+  }, [visibleTasks, viewMode]);
 
   // navigation helpers
-  const handleOpenTask = (id) => navigate(`/tasks/${id}`);
+    const handleOpenTask = (task) => {
+    if (task.mode === "floating") {
+      navigate(`/tasks/${task.id}/todo`);
+    } else {
+      navigate(`/tasks/${task.id}`);
+    }
+  };
+
   const handleEditTask = (id) => navigate(`/tasks/${id}/edit`);
   const handleSplitTask = (id) => navigate(`/tasks/${id}/split`);
   const handleCreateTask = () => {
@@ -341,6 +393,7 @@ export default function Tasks() {
 
   /* -------------------- rendering -------------------- */
   return (
+    <PageTransition>
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-500">
       <Navbar />
 
@@ -469,7 +522,7 @@ export default function Tasks() {
                     To-Do Tasks
                   </button>
                 </div>
-
+                
                 {viewMode === "scheduled" && (
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className="text-gray-500">Status:</span>
@@ -523,101 +576,43 @@ export default function Tasks() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {visibleTasks.map((task) => {
-                    const due = safeDate(task.dueDate);
-                    const dueText = viewMode === "scheduled" ? (due ? formatYMDLocal(due) : "No due date") : "To-Do Task";
+                  {rankedTasks.map((task, index) => {
 
-                    const estimatedMinutes = typeof task.estimatedMinutes === "number" ? task.estimatedMinutes : null;
-                    const isSplitSegment = !!task.isSplitSegment;
-                    const isSplitParent = !!task.isSplitParent;
+                  const breakMinutesValue =
+                    typeof task.breakMinutes === "number" ? task.breakMinutes : 0;
 
-                    // check if this task currently has child segments
-                    const hasSegments = tasks.some((t) => t.parentTaskId === task.id && t.isSplitSegment === true);
+                  const breakText = breakLabel(breakMinutesValue);
 
-                    // can split if long enough, not already split/segment, and no existing segments
-                    const canSplit = estimatedMinutes !== null && estimatedMinutes >= 180 && !isSplitSegment && !hasSegments;
+                  return (
+                    <div key={task.id} className="flex items-start gap-3">
 
-                    const startDate = task.startDate || null;
-                    const startTime = task.startTime || null;
-                    const endDate = task.endDate || null;
-                    const endTime = task.endTime || null;
-
-                    let durationLabel = "";
-                    if (estimatedMinutes !== null) {
-                      const hours = estimatedMinutes / 60;
-                      durationLabel = hours >= 1 ? `${hours.toFixed(hours % 1 === 0 ? 0 : 1)} h` : `${estimatedMinutes} min`;
-                    }
-
-                    const urgency = task.urgencyLevel;
-                    const importance = task.importanceLevel;
-                    const difficulty = task.difficultyLevel;
-
-                    const segmentIndex = task.segmentIndex;
-                    const segmentCount = task.segmentCount;
-                    const splitSegmentCount = task.splitSegmentCount;
-                    const breakMinutesValue = typeof task.breakMinutes === "number" ? task.breakMinutes : 0;
-                    const breakText = breakLabel(breakMinutesValue);
-
-                    const priorityScore = typeof task.priorityScore === "number" ? task.priorityScore : null;
-
-                    // finalized check for UI (same logic as TaskDetail)
-                    const finalized =
-                      task.finalized === true ||
-                      task.status === "completed" ||
-                      task.status === "missed" ||
-                      (task.completedCount || 0) > 0 ||
-                      (task.missedCount || 0) > 0;
-
-                    return (
-                      <div key={task.id} className="w-full bg-white rounded-2xl shadow-sm p-4 border border-emerald-50 hover:border-emerald-200 hover:shadow-md transition flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <button type="button" onClick={() => handleOpenTask(task.id)} className="text-left flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-gray-900">{task.title || "Untitled task"}</span>
-
-                            {viewMode === "floating" && !due && <span className="px-2 py-0.5 text-[10px] rounded-full bg-gray-100 text-gray-700">To-Do task</span>}
-
-                            {isSplitSegment && <span className="px-2 py-0.5 text-[10px] rounded-full bg-amber-50 text-amber-800 border border-amber-200">Segment {segmentIndex}/{segmentCount}</span>}
-
-                            {isSplitParent && hasSegments && <span className="px-2 py-0.5 text-[10px] rounded-full bg-blue-50 text-blue-800 border border-blue-200">Split parent{splitSegmentCount ? ` (${splitSegmentCount} segments)` : ""}</span>}
-                          </div>
-
-                          <div className="mt-1 text-xs text-gray-500 flex flex-col gap-1">
-                            {viewMode === "scheduled" && (
-                              <>
-                                <div className="flex flex-wrap gap-2">
-                                  <span>Start: <span className="font-medium text-gray-700">{startDate} {startTime}</span></span>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                  <span>End: <span className="font-medium text-gray-700">{endDate} {endTime}</span></span>
-                                  <span>• Due: <span className="font-medium text-gray-700">{dueText}</span></span>
-                                </div>
-                                {durationLabel && <div>Duration: <span className="font-medium text-gray-700">{durationLabel}</span></div>}
-                                {priorityScore !== null && <div>Priority score: <span className="font-semibold text-emerald-700">{priorityScore.toFixed(2)}</span></div>}
-                                {breakText && <div>Recommended break: <span className="font-medium text-gray-700">{breakText}</span></div>}
-                                <div className="flex flex-wrap gap-2 mt-1">
-                                  {urgency && <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-[10px] text-emerald-800 border border-emerald-100">{urgency === "urgent" ? "Urgent" : "Somewhat urgent"}</span>}
-                                  {importance && <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-[10px] text-emerald-800 border border-emerald-100">{importance === "important" ? "Important" : "Somewhat important"}</span>}
-                                  {difficulty && <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-[10px] text-emerald-800 border border-emerald-100">{difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}</span>}
-                                </div>
-                              </>
-                            )}
-
-                            {viewMode === "floating" && <div className="text-xs text-gray-500 mt-1">Flexible to-do task (no dates).{breakText && <> Recommended break: <span className="font-medium text-gray-700">{breakText}</span></>}</div>}
-                          </div>
-                        </button>
-
-                        <div className="flex flex-wrap items-center gap-2 justify-start sm:justify-end">
-                          {canSplit && !finalized && (
-                            <button type="button" onClick={() => handleSplitTask(task.id)} className="px-3 py-1 text-xs rounded-full border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition">Split</button>
-                          )}
-                          {!finalized && (
-                            <button type="button" onClick={() => handleEditTask(task.id)} className="px-3 py-1 text-xs rounded-full border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition">Edit</button>
-                          )}
-                          <button type="button" onClick={() => handleDeleteTask(task)} className="px-3 py-1 text-xs rounded-full border border-red-300 text-red-700 bg-red-50 hover:bg-red-100 transition">Delete</button>
+                      {/* 🔥 NUMBER BADGE */}
+                      {viewMode === "scheduled" && (
+                        <div
+                          className={`w-8 h-8 flex items-center justify-center rounded-full text-xs font-bold text-white shadow
+                            ${index === 0 ? "bg-red-500" : "bg-emerald-600"}
+                          `}
+                        >
+                          {index + 1}
                         </div>
+                      )}
+
+                      {/* TASK CARD */}
+                      <div className="flex-1">
+                        <TaskCard
+                          task={task}
+                          tasks={tasks}
+                          viewMode={viewMode}
+                          breakText={breakText}
+                          handleOpenTask={handleOpenTask}
+                          handleEditTask={handleEditTask}
+                          handleSplitTask={handleSplitTask}
+                          handleDeleteTask={handleDeleteTask}
+                        />
                       </div>
-                    );
-                  })}
+                  </div>
+                );
+                })}
                 </div>
               )}
             </div>
@@ -625,5 +620,6 @@ export default function Tasks() {
         </div>
       </div>
     </div>
+    </PageTransition> 
   );
 }

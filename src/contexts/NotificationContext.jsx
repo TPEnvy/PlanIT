@@ -6,19 +6,21 @@ import React, {
   useState,
 } from "react";
 import {
-  addDoc,
   collection,
   doc,
   getDoc,
   onSnapshot,
   orderBy,
   query,
-  serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
 import { getMessaging, isSupported, onMessage } from "firebase/messaging";
 import app, { firestore } from "../server.js/firebase";
 import { useAuth } from "./AuthContext";
+import {
+  createUserNotification,
+  showDeviceNotification,
+} from "../utils/notifications";
 
 const NotificationContext = createContext();
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
@@ -88,34 +90,6 @@ export function NotificationProvider({ children }) {
     timersRef.current.clear();
   };
 
-  const showBrowserNotification = async (title, body) => {
-    if (!("Notification" in window)) return;
-
-    try {
-      if (Notification.permission === "default") {
-        await Notification.requestPermission();
-      }
-
-      if (Notification.permission === "granted") {
-        new Notification(title, { body });
-      }
-    } catch (err) {
-      console.error("Browser notification failed:", err);
-    }
-  };
-
-  const createNotificationDoc = async (uid, payload) => {
-    try {
-      await addDoc(collection(firestore, `users/${uid}/notifications`), {
-        ...payload,
-        read: false,
-        createdAt: serverTimestamp(),
-      });
-    } catch (err) {
-      console.error("Creating notification document failed:", err);
-    }
-  };
-
   const runReminder = async (uid, taskId, type, flagName) => {
     try {
       const taskRef = doc(firestore, `users/${uid}/tasks/${taskId}`);
@@ -127,13 +101,13 @@ export function NotificationProvider({ children }) {
 
       const { title, body } = buildReminderBody(latestTask, type);
 
-      await createNotificationDoc(uid, {
+      await createUserNotification(uid, {
         title,
         body,
         taskId,
         type,
       });
-      await showBrowserNotification(title, body);
+      await showDeviceNotification(title, body);
       await updateDoc(taskRef, { [flagName]: true });
     } catch (err) {
       console.error(`Running reminder failed for ${taskId}:`, err);
@@ -184,7 +158,7 @@ export function NotificationProvider({ children }) {
       const messaging = getMessaging(app);
       unsubscribe = onMessage(messaging, (payload) => {
         if (payload?.data?.title) {
-          showBrowserNotification(payload.data.title, payload.data.body || "");
+          showDeviceNotification(payload.data.title, payload.data.body || "");
         }
       });
     };
@@ -241,8 +215,12 @@ export function NotificationProvider({ children }) {
           reminderPlans.forEach((plan) => {
             if (!plan.when || !plan.upperBound) return;
             if (task?.[plan.flagName]) return;
-            if (plan.when <= now) return;
             if (plan.upperBound <= now) return;
+
+            if (plan.when <= now) {
+              runReminder(user.uid, task.id, plan.type, plan.flagName);
+              return;
+            }
 
             const timeoutId = setTimeout(() => {
               timersRef.current.delete(plan.key);
