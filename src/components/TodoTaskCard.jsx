@@ -63,6 +63,7 @@ export default function TodoTaskDetail() {
       completedCount: increment(1),
       status: "completed",
       finalized: true,
+      lastCompletedAt: serverTimestamp(),
       completedAt: serverTimestamp(),
     });
     await createUserNotification(user.uid, {
@@ -70,10 +71,15 @@ export default function TodoTaskDetail() {
       body: `${task.title || "Untitled task"} was marked as completed.`,
       taskId: task.id,
       type: "task_completed",
+      notificationId: `task_completed_${task.id}`,
     });
     await showDeviceNotification(
       "Task completed",
-      `${task.title || "Untitled task"} was marked as completed.`
+      `${task.title || "Untitled task"} was marked as completed.`,
+      {
+        data: { taskId: task.id, type: "task_completed" },
+        tag: `task_completed:${task.id}`,
+      }
     );
     navigate("/tasks");
   };
@@ -84,6 +90,7 @@ export default function TodoTaskDetail() {
       missedCount: increment(1),
       status: "missed",
       finalized: true,
+      lastMissedAt: serverTimestamp(),
       missedAt: serverTimestamp(),
     });
     await createUserNotification(user.uid, {
@@ -91,10 +98,15 @@ export default function TodoTaskDetail() {
       body: `${task.title || "Untitled task"} was marked as missed.`,
       taskId: task.id,
       type: "task_missed",
+      notificationId: `task_missed_${task.id}`,
     });
     await showDeviceNotification(
       "Task missed",
-      `${task.title || "Untitled task"} was marked as missed.`
+      `${task.title || "Untitled task"} was marked as missed.`,
+      {
+        data: { taskId: task.id, type: "task_missed" },
+        tag: `task_missed:${task.id}`,
+      }
     );
     navigate("/tasks");
   };

@@ -199,6 +199,10 @@ export default function EditTask() {
         updateData.notifiedBeforeEnd = false;
         updateData.notifiedByEmailStart = false;
         updateData.notifiedByEmailEnd = false;
+        updateData.pushSent5m = false;
+        updateData.pushSentBeforeEnd = false;
+        updateData.pushSentStart = false;
+        updateData.pushSentEnd = false;
       } else {
         updateData.startDate = null;
         updateData.startTime = null;
@@ -216,6 +220,10 @@ export default function EditTask() {
         updateData.notifiedBeforeEnd = false;
         updateData.notifiedByEmailStart = false;
         updateData.notifiedByEmailEnd = false;
+        updateData.pushSent5m = false;
+        updateData.pushSentBeforeEnd = false;
+        updateData.pushSentStart = false;
+        updateData.pushSentEnd = false;
       }
 
       await updateDoc(ref, updateData);
