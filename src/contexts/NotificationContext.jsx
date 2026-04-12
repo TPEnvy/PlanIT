@@ -2,6 +2,7 @@ import React, {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import {
@@ -10,12 +11,14 @@ import {
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   updateDoc,
 } from "firebase/firestore";
 import { getMessaging, isSupported, onMessage } from "firebase/messaging";
 import app, { firestore } from "../server.js/firebase";
 import { useAuth } from "./AuthContext";
 import {
+  createUserNotification,
   registerPushToken,
   requestNotificationPermission,
   showDeviceNotification,
@@ -24,6 +27,41 @@ import {
 const NotificationContext = createContext();
 const enablePushNotifications =
   import.meta.env.VITE_ENABLE_PUSH_NOTIFICATIONS !== "false";
+const MAX_REMINDER_DRIFT_MS = 30000;
+const REMINDER_CONFIGS = [
+  {
+    type: "5m",
+    title: "Starting Soon",
+    taskField: "startAt",
+    flagField: "pushSent5m",
+    offsetMs: -300000,
+    getBody: (taskTitle) => `"${taskTitle}" starts in 5 minutes`,
+  },
+  {
+    type: "start",
+    title: "Task Started",
+    taskField: "startAt",
+    flagField: "pushSentStart",
+    offsetMs: 0,
+    getBody: (taskTitle) => `"${taskTitle}" is starting now`,
+  },
+  {
+    type: "before_end",
+    title: "Task ending soon",
+    taskField: "endAt",
+    flagField: "pushSentBeforeEnd",
+    offsetMs: -300000,
+    getBody: (taskTitle) => `"${taskTitle}" ends in 5 minutes`,
+  },
+  {
+    type: "end",
+    title: "Task Ended",
+    taskField: "endAt",
+    flagField: "pushSentEnd",
+    offsetMs: 0,
+    getBody: (taskTitle) => `"${taskTitle}" has ended`,
+  },
+];
 
 function isLegacyDayReminder(notification) {
   const type = String(notification?.type || "").toLowerCase();
@@ -42,6 +80,29 @@ function normalizeNotificationType(type) {
   return type || "unknown";
 }
 
+function safeDate(value) {
+  if (!value) return null;
+  if (typeof value.toDate === "function") return value.toDate();
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getReminderKey(taskId, type) {
+  return `${taskId}:${type}`;
+}
+
+function getReminderNotificationId(taskId, type) {
+  return `reminder_${taskId}_${type}`;
+}
+
+function clearReminderTimers(timersRef) {
+  timersRef.current.forEach((timerId) => {
+    clearTimeout(timerId);
+  });
+  timersRef.current.clear();
+}
+
 export function useNotifications() {
   return useContext(NotificationContext);
 }
@@ -50,6 +111,7 @@ export function NotificationProvider({ children }) {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const reminderTimersRef = useRef(new Map());
 
   useEffect(() => {
     if (!user || !firestore) {
@@ -105,6 +167,136 @@ export function NotificationProvider({ children }) {
     );
 
     return () => unsubscribe();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || !firestore) {
+      clearReminderTimers(reminderTimersRef);
+      return undefined;
+    }
+
+    const tasksRef = collection(firestore, `users/${user.uid}/tasks`);
+
+    const unsubscribe = onSnapshot(
+      tasksRef,
+      (snapshot) => {
+        clearReminderTimers(reminderTimersRef);
+
+        snapshot.docs.forEach((docSnap) => {
+          const task = docSnap.data() || {};
+
+          if (task.status !== "pending" || task.isSplitParent) {
+            return;
+          }
+
+          const taskTitle = task.title || "Untitled Task";
+
+          REMINDER_CONFIGS.forEach((config) => {
+            if (task[config.flagField]) {
+              return;
+            }
+
+            const taskDate = safeDate(task[config.taskField]);
+            if (!taskDate) {
+              return;
+            }
+
+            const scheduledAt = taskDate.getTime() + config.offsetMs;
+            const delay = scheduledAt - Date.now();
+
+            if (delay <= 0) {
+              return;
+            }
+
+            const timerKey = getReminderKey(docSnap.id, config.type);
+            const taskRef = doc(firestore, `users/${user.uid}/tasks/${docSnap.id}`);
+            const timeoutId = window.setTimeout(async () => {
+              reminderTimersRef.current.delete(timerKey);
+
+              try {
+                const claimed = await runTransaction(
+                  firestore,
+                  async (transaction) => {
+                    const freshSnap = await transaction.get(taskRef);
+
+                    if (!freshSnap.exists()) {
+                      return null;
+                    }
+
+                    const latestTask = freshSnap.data() || {};
+                    if (
+                      latestTask.status !== "pending" ||
+                      latestTask.isSplitParent ||
+                      latestTask[config.flagField]
+                    ) {
+                      return null;
+                    }
+
+                    const latestDate = safeDate(latestTask[config.taskField]);
+                    if (!latestDate) {
+                      return null;
+                    }
+
+                    const latestScheduledAt =
+                      latestDate.getTime() + config.offsetMs;
+                    const lateByMs = Date.now() - latestScheduledAt;
+
+                    if (lateByMs > MAX_REMINDER_DRIFT_MS) {
+                      return null;
+                    }
+
+                    transaction.update(taskRef, {
+                      [config.flagField]: true,
+                    });
+
+                    return latestTask;
+                  }
+                );
+
+                if (!claimed) {
+                  return;
+                }
+
+                const latestTitle = claimed.title || taskTitle;
+                const body = config.getBody(latestTitle);
+
+                await createUserNotification(user.uid, {
+                  title: config.title,
+                  body,
+                  taskId: docSnap.id,
+                  type: config.type,
+                  notificationId: getReminderNotificationId(
+                    docSnap.id,
+                    config.type
+                  ),
+                });
+
+                await showDeviceNotification(config.title, body, {
+                  data: { taskId: docSnap.id, type: config.type },
+                  tag: `reminder:${config.type}:${docSnap.id}`,
+                });
+              } catch (error) {
+                console.error(
+                  `Failed to send scheduled reminder (${config.type}):`,
+                  error
+                );
+              }
+            }, delay);
+
+            reminderTimersRef.current.set(timerKey, timeoutId);
+          });
+        });
+      },
+      (error) => {
+        console.error("Task reminder listener error:", error);
+        clearReminderTimers(reminderTimersRef);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+      clearReminderTimers(reminderTimersRef);
+    };
   }, [user]);
 
   useEffect(() => {
