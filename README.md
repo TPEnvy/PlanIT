@@ -19,11 +19,14 @@ Add these Environment Variables in the Vercel project settings before deploying:
 5. `VITE_FIREBASE_MESSAGING_SENDER_ID`
 6. `VITE_FIREBASE_APP_ID`
 7. `VITE_FIREBASE_MEASUREMENT_ID`
-8. `VITE_ENABLE_PUSH_NOTIFICATIONS`
+8. `VITE_FIREBASE_VAPID_KEY`
+9. `VITE_ENABLE_PUSH_NOTIFICATIONS`
 
 `vercel.json` adds the SPA rewrite Vercel expects for deep links such as `/dashboard` and `/tasks/:id`.
 
 After the first deploy, add the Vercel production and preview domains to Firebase Authentication authorized domains, and complete Firebase Cloud Messaging web push setup for those same domains if you want device notifications on desktop or mobile browsers.
+
+The app now registers FCM tokens only after notification permission is granted. For the stronger desktop/mobile device notifications to work while the app is in the background, make sure your Firebase Web Push certificate key is stored in `VITE_FIREBASE_VAPID_KEY`.
 
 ## Google Sign-In
 
