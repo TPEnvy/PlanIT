@@ -26,6 +26,10 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 const MAX_REMINDER_DRIFT_MS = 30000;
+const STALE_PUSH_TOKEN_ERROR_CODES = new Set([
+  "messaging/invalid-registration-token",
+  "messaging/registration-token-not-registered",
+]);
 const resendApiKey = process.env.RESEND_API_KEY;
 const resendFromEmail = process.env.RESEND_FROM_EMAIL;
 const resendReplyToEmail = process.env.RESEND_REPLY_TO_EMAIL;
@@ -140,19 +144,128 @@ async function createNotification(uid, data, notificationId = null) {
 
 async function sendPushToUser(uid, title, body) {
   const snap = await db.collection(`users/${uid}/fcmTokens`).get();
-  const tokens = [...new Set(snap.docs.map((docSnap) => docSnap.data().token))];
+  const tokenDocIdsByToken = new Map();
 
-  if (!tokens.length) return;
+  snap.docs.forEach((docSnap) => {
+    const token = String(docSnap.data()?.token || "").trim();
+    if (!token) {
+      return;
+    }
 
-  await admin.messaging().sendEachForMulticast({
-    tokens,
-    data: {
-      title,
-      body,
-    },
+    if (!tokenDocIdsByToken.has(token)) {
+      tokenDocIdsByToken.set(token, []);
+    }
+
+    tokenDocIdsByToken.get(token).push(docSnap.id);
   });
 
-  console.log("Push sent:", title);
+  const tokens = [...tokenDocIdsByToken.keys()];
+  if (!tokens.length) {
+    console.warn("Push skipped: no registered FCM tokens found.", {
+      uid,
+      title,
+    });
+    return {
+      attemptedCount: 0,
+      successCount: 0,
+      failureCount: 0,
+      reason: "no_registered_tokens",
+    };
+  }
+
+  let response;
+  try {
+    response = await admin.messaging().sendEachForMulticast({
+      tokens,
+      data: {
+        title,
+        body,
+      },
+    });
+  } catch (error) {
+    console.error("Push request failed before delivery:", {
+      uid,
+      title,
+      attemptedCount: tokens.length,
+      code: error?.code || "unknown",
+      message: error?.message || "Unknown Firebase messaging error",
+    });
+    return {
+      attemptedCount: tokens.length,
+      successCount: 0,
+      failureCount: tokens.length,
+      reason: error?.code || "request_failed",
+    };
+  }
+
+  const failedDeliveries = [];
+  const staleTokenDocIds = new Set();
+
+  response.responses.forEach((result, index) => {
+    if (result.success) {
+      return;
+    }
+
+    const token = tokens[index];
+    const errorCode = result.error?.code || "unknown";
+    const errorMessage =
+      result.error?.message || "Unknown Firebase delivery error";
+
+    failedDeliveries.push({
+      tokenSuffix: token.slice(-12),
+      code: errorCode,
+      message: errorMessage,
+    });
+
+    if (STALE_PUSH_TOKEN_ERROR_CODES.has(errorCode)) {
+      for (const docId of tokenDocIdsByToken.get(token) || []) {
+        staleTokenDocIds.add(docId);
+      }
+    }
+  });
+
+  let deletedStaleTokenCount = 0;
+  if (staleTokenDocIds.size) {
+    const deletionResults = await Promise.allSettled(
+      [...staleTokenDocIds].map((docId) =>
+        db.collection(`users/${uid}/fcmTokens`).doc(docId).delete()
+      )
+    );
+    deletedStaleTokenCount = deletionResults.filter(
+      (result) => result.status === "fulfilled"
+    ).length;
+
+    const deletionErrors = deletionResults
+      .filter((result) => result.status === "rejected")
+      .map((result) => result.reason?.message || String(result.reason));
+
+    if (deletionErrors.length) {
+      console.error("Failed cleaning stale FCM tokens:", {
+        uid,
+        title,
+        deletedStaleTokenCount,
+        deletionErrors,
+      });
+    }
+  }
+
+  const deliverySummary = {
+    uid,
+    title,
+    attemptedCount: tokens.length,
+    successCount: response.successCount,
+    failureCount: response.failureCount,
+    deletedStaleTokenCount,
+    failedDeliveries,
+  };
+
+  if (response.failureCount > 0) {
+    console.warn("Push delivery partially failed:", deliverySummary);
+  } else {
+    console.log("Push delivered successfully:", deliverySummary);
+  }
+
+  return deliverySummary;
 }
 
 const timers = new Map();
