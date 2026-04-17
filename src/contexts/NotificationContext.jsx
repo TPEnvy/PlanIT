@@ -8,10 +8,10 @@ import React, {
 import {
   collection,
   doc,
-  getDoc,
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   updateDoc,
 } from "firebase/firestore";
 import { getMessaging, isSupported, onMessage } from "firebase/messaging";
@@ -19,58 +19,88 @@ import app, { firestore } from "../server.js/firebase";
 import { useAuth } from "./AuthContext";
 import {
   createUserNotification,
+  registerPushToken,
+  requestNotificationPermission,
   showDeviceNotification,
 } from "../utils/notifications";
 
 const NotificationContext = createContext();
-const FIVE_MINUTES_MS = 5 * 60 * 1000;
-const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const enablePushNotifications =
   import.meta.env.VITE_ENABLE_PUSH_NOTIFICATIONS !== "false";
+const MAX_REMINDER_DRIFT_MS = 30000;
+const REMINDER_CONFIGS = [
+  {
+    type: "5m",
+    title: "Starting Soon",
+    taskField: "startAt",
+    flagField: "pushSent5m",
+    offsetMs: -300000,
+    getBody: (taskTitle) => `"${taskTitle}" starts in 5 minutes`,
+  },
+  {
+    type: "start",
+    title: "Task Started",
+    taskField: "startAt",
+    flagField: "pushSentStart",
+    offsetMs: 0,
+    getBody: (taskTitle) => `"${taskTitle}" is starting now`,
+  },
+  {
+    type: "before_end",
+    title: "Task ending soon",
+    taskField: "endAt",
+    flagField: "pushSentBeforeEnd",
+    offsetMs: -300000,
+    getBody: (taskTitle) => `"${taskTitle}" ends in 5 minutes`,
+  },
+  {
+    type: "end",
+    title: "Task Ended",
+    taskField: "endAt",
+    flagField: "pushSentEnd",
+    offsetMs: 0,
+    getBody: (taskTitle) => `"${taskTitle}" has ended`,
+  },
+];
 
-function safeDate(value) {
-  if (!value) return null;
+function isLegacyDayReminder(notification) {
+  const type = String(notification?.type || "").toLowerCase();
+  const title = String(notification?.title || "").toLowerCase();
+  const body = String(notification?.body || "").toLowerCase();
 
-  try {
-    if (typeof value.toDate === "function") return value.toDate();
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? null : date;
-  } catch {
-    return null;
-  }
-}
-
-function isTaskFinished(task) {
   return (
-    task?.finalized === true ||
-    task?.status === "completed" ||
-    task?.status === "missed" ||
-    Number(task?.completedCount || 0) > 0 ||
-    Number(task?.missedCount || 0) > 0
+    type === "less_than_day" ||
+    title.includes("24 hours") ||
+    body.includes("24 hours")
   );
 }
 
-function buildReminderBody(task, type) {
-  const title = task?.title || "Untitled task";
+function normalizeNotificationType(type) {
+  if (type === "before_start" || type === "5m") return "5m";
+  return type || "unknown";
+}
 
-  if (type === "less_than_day") {
-    return {
-      title: "Task within 24 hours",
-      body: `${title} is due within 24 hours.`,
-    };
-  }
+function safeDate(value) {
+  if (!value) return null;
+  if (typeof value.toDate === "function") return value.toDate();
 
-  if (type === "before_start") {
-    return {
-      title: "Task starting soon",
-      body: `${title} starts in 5 minutes.`,
-    };
-  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
 
-  return {
-    title: "Task ending soon",
-    body: `${title} ends in 5 minutes.`,
-  };
+function getReminderKey(taskId, type) {
+  return `${taskId}:${type}`;
+}
+
+function getReminderNotificationId(taskId, type) {
+  return `reminder_${taskId}_${type}`;
+}
+
+function clearReminderTimers(timersRef) {
+  timersRef.current.forEach((timerId) => {
+    clearTimeout(timerId);
+  });
+  timersRef.current.clear();
 }
 
 export function useNotifications() {
@@ -81,40 +111,7 @@ export function NotificationProvider({ children }) {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
-  const timersRef = useRef(new Map());
-
-  const clearTimers = () => {
-    for (const timeoutId of timersRef.current.values()) {
-      clearTimeout(timeoutId);
-    }
-    timersRef.current.clear();
-  };
-
-  const runReminder = async (uid, taskId, type, flagName) => {
-    if (!firestore) return;
-
-    try {
-      const taskRef = doc(firestore, `users/${uid}/tasks/${taskId}`);
-      const snap = await getDoc(taskRef);
-      if (!snap.exists()) return;
-
-      const latestTask = { id: snap.id, ...snap.data() };
-      if (isTaskFinished(latestTask) || latestTask?.[flagName]) return;
-
-      const { title, body } = buildReminderBody(latestTask, type);
-
-      await createUserNotification(uid, {
-        title,
-        body,
-        taskId,
-        type,
-      });
-      await showDeviceNotification(title, body);
-      await updateDoc(taskRef, { [flagName]: true });
-    } catch (err) {
-      console.error(`Running reminder failed for ${taskId}:`, err);
-    }
-  };
+  const reminderTimersRef = useRef(new Map());
 
   useEffect(() => {
     if (!user || !firestore) {
@@ -129,10 +126,36 @@ export function NotificationProvider({ children }) {
     const unsubscribe = onSnapshot(
       notificationsQuery,
       (snapshot) => {
-        const list = snapshot.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...docSnap.data(),
-        }));
+        const uniqueNotifications = new Map();
+
+        snapshot.docs.forEach((docSnap) => {
+          const notification = {
+            id: docSnap.id,
+            ...docSnap.data(),
+          };
+          if (isLegacyDayReminder(notification)) {
+            return;
+          }
+          const normalizedType = normalizeNotificationType(notification.type);
+          const shouldDedupeByTask = Boolean(notification.taskId) &&
+            [
+              "5m",
+              "before_end",
+              "start",
+              "end",
+              "task_completed",
+              "task_missed",
+            ].includes(normalizedType);
+          const dedupeKey = shouldDedupeByTask
+            ? `${notification.taskId}|${normalizedType}`
+            : notification.id;
+
+          if (!uniqueNotifications.has(dedupeKey)) {
+            uniqueNotifications.set(dedupeKey, notification);
+          }
+        });
+
+        const list = Array.from(uniqueNotifications.values());
         setNotifications(list);
         setLoading(false);
       },
@@ -144,6 +167,193 @@ export function NotificationProvider({ children }) {
     );
 
     return () => unsubscribe();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || !firestore) {
+      clearReminderTimers(reminderTimersRef);
+      return undefined;
+    }
+
+    const tasksRef = collection(firestore, `users/${user.uid}/tasks`);
+
+    const unsubscribe = onSnapshot(
+      tasksRef,
+      (snapshot) => {
+        clearReminderTimers(reminderTimersRef);
+
+        snapshot.docs.forEach((docSnap) => {
+          const task = docSnap.data() || {};
+
+          if (task.status !== "pending" || task.isSplitParent) {
+            return;
+          }
+
+          const taskTitle = task.title || "Untitled Task";
+
+          REMINDER_CONFIGS.forEach((config) => {
+            if (task[config.flagField]) {
+              return;
+            }
+
+            const taskDate = safeDate(task[config.taskField]);
+            if (!taskDate) {
+              return;
+            }
+
+            const scheduledAt = taskDate.getTime() + config.offsetMs;
+            const delay = scheduledAt - Date.now();
+
+            if (delay <= 0) {
+              return;
+            }
+
+            const timerKey = getReminderKey(docSnap.id, config.type);
+            const taskRef = doc(firestore, `users/${user.uid}/tasks/${docSnap.id}`);
+            const timeoutId = window.setTimeout(async () => {
+              reminderTimersRef.current.delete(timerKey);
+
+              try {
+                const claimed = await runTransaction(
+                  firestore,
+                  async (transaction) => {
+                    const freshSnap = await transaction.get(taskRef);
+
+                    if (!freshSnap.exists()) {
+                      return null;
+                    }
+
+                    const latestTask = freshSnap.data() || {};
+                    if (
+                      latestTask.status !== "pending" ||
+                      latestTask.isSplitParent ||
+                      latestTask[config.flagField]
+                    ) {
+                      return null;
+                    }
+
+                    const latestDate = safeDate(latestTask[config.taskField]);
+                    if (!latestDate) {
+                      return null;
+                    }
+
+                    const latestScheduledAt =
+                      latestDate.getTime() + config.offsetMs;
+                    const lateByMs = Date.now() - latestScheduledAt;
+
+                    if (lateByMs > MAX_REMINDER_DRIFT_MS) {
+                      return null;
+                    }
+
+                    transaction.update(taskRef, {
+                      [config.flagField]: true,
+                    });
+
+                    return latestTask;
+                  }
+                );
+
+                if (!claimed) {
+                  return;
+                }
+
+                const latestTitle = claimed.title || taskTitle;
+                const body = config.getBody(latestTitle);
+
+                await createUserNotification(user.uid, {
+                  title: config.title,
+                  body,
+                  taskId: docSnap.id,
+                  type: config.type,
+                  notificationId: getReminderNotificationId(
+                    docSnap.id,
+                    config.type
+                  ),
+                });
+
+                await showDeviceNotification(config.title, body, {
+                  data: { taskId: docSnap.id, type: config.type },
+                  tag: `reminder:${config.type}:${docSnap.id}`,
+                });
+              } catch (error) {
+                console.error(
+                  `Failed to send scheduled reminder (${config.type}):`,
+                  error
+                );
+              }
+            }, delay);
+
+            reminderTimersRef.current.set(timerKey, timeoutId);
+          });
+        });
+      },
+      (error) => {
+        console.error("Task reminder listener error:", error);
+        clearReminderTimers(reminderTimersRef);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+      clearReminderTimers(reminderTimersRef);
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || !enablePushNotifications) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    let removeInteractionListeners = () => {};
+
+    const syncPushAccess = async () => {
+      if (
+        typeof window === "undefined" ||
+        !("Notification" in window) ||
+        cancelled
+      ) {
+        return;
+      }
+
+      if (Notification.permission === "granted") {
+        await registerPushToken(user.uid);
+        return;
+      }
+
+      if (Notification.permission !== "default") {
+        return;
+      }
+
+      const handleFirstInteraction = async () => {
+        removeInteractionListeners();
+        if (cancelled) return;
+
+        const permission = await requestNotificationPermission();
+        if (permission === "granted" && !cancelled) {
+          await registerPushToken(user.uid);
+        }
+      };
+
+      window.addEventListener("pointerdown", handleFirstInteraction, {
+        once: true,
+      });
+      window.addEventListener("keydown", handleFirstInteraction, {
+        once: true,
+      });
+
+      removeInteractionListeners = () => {
+        window.removeEventListener("pointerdown", handleFirstInteraction);
+        window.removeEventListener("keydown", handleFirstInteraction);
+      };
+    };
+
+    syncPushAccess();
+
+    return () => {
+      cancelled = true;
+      removeInteractionListeners();
+    };
   }, [user]);
 
   useEffect(() => {
@@ -159,7 +369,10 @@ export function NotificationProvider({ children }) {
 
       const messaging = getMessaging(app);
       unsubscribe = onMessage(messaging, (payload) => {
-        if (payload?.data?.title) {
+        if (
+          payload?.data?.title &&
+          !isLegacyDayReminder(payload?.data)
+        ) {
           showDeviceNotification(payload.data.title, payload.data.body || "");
         }
       });
@@ -168,81 +381,6 @@ export function NotificationProvider({ children }) {
     setupForegroundMessaging();
     return () => unsubscribe();
   }, []);
-
-  useEffect(() => {
-    clearTimers();
-
-    if (!user || !firestore) {
-      return undefined;
-    }
-
-    const tasksRef = collection(firestore, `users/${user.uid}/tasks`);
-    const unsubscribe = onSnapshot(
-      tasksRef,
-      (snapshot) => {
-        clearTimers();
-        const now = Date.now();
-
-        snapshot.docs.forEach((docSnap) => {
-          const task = { id: docSnap.id, ...docSnap.data() };
-          if (isTaskFinished(task)) return;
-
-          const startAt = safeDate(task.startAt);
-          const endAt = safeDate(task.endAt);
-          const dueDate = safeDate(task.dueDate);
-          const reminderPlans = [
-            {
-              key: `${task.id}_lt24h`,
-              when: (startAt || dueDate || endAt)?.getTime() - ONE_DAY_MS,
-              upperBound: (startAt || dueDate || endAt)?.getTime(),
-              type: "less_than_day",
-              flagName: "notifiedLessThanDay",
-            },
-            {
-              key: `${task.id}_before_start`,
-              when: startAt?.getTime() - FIVE_MINUTES_MS,
-              upperBound: startAt?.getTime(),
-              type: "before_start",
-              flagName: "notifiedBeforeStart",
-            },
-            {
-              key: `${task.id}_before_end`,
-              when: endAt?.getTime() - FIVE_MINUTES_MS,
-              upperBound: endAt?.getTime(),
-              type: "before_end",
-              flagName: "notifiedBeforeEnd",
-            },
-          ];
-
-          reminderPlans.forEach((plan) => {
-            if (!plan.when || !plan.upperBound) return;
-            if (task?.[plan.flagName]) return;
-            if (plan.upperBound <= now) return;
-
-            if (plan.when <= now) {
-              runReminder(user.uid, task.id, plan.type, plan.flagName);
-              return;
-            }
-
-            const timeoutId = setTimeout(() => {
-              timersRef.current.delete(plan.key);
-              runReminder(user.uid, task.id, plan.type, plan.flagName);
-            }, plan.when - now);
-
-            timersRef.current.set(plan.key, timeoutId);
-          });
-        });
-      },
-      (error) => {
-        console.error("Task reminder listener error:", error);
-      }
-    );
-
-    return () => {
-      unsubscribe();
-      clearTimers();
-    };
-  }, [user]);
 
   const markAsRead = async (notificationId) => {
     if (!user || !notificationId || !firestore) return;
