@@ -18,6 +18,13 @@ import { firestore } from "../server.js/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import Navbar from "../components/Navbar";
 import PageTransition from "../components/PageTransition";
+import {
+  buildPreventNewTasksMessage,
+  getPreventNewTasksBlock,
+  normalizePatternTitle,
+  recomputeAndSavePatternStats,
+} from "../utils/pattern";
+import { computePriorityScore } from "../utils/Patternengine";
 
 /* -------------------- helpers -------------------- */
 
@@ -54,6 +61,11 @@ function formatYMDLocal(date) {
   return toLocalYMD(date);
 }
 
+function startOfLocalDay(date) {
+  if (!date) return null;
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
 // is same day using local ymd comparison
 function isSameDayLocal(a, b) {
   if (!a || !b) return false;
@@ -66,6 +78,48 @@ function startOfMonthLocal(date) {
 }
 function daysInMonthLocal(date) {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+}
+
+function resolveTaskDateRange(task) {
+  const startAt = safeDate(task.startAt);
+  const endAt = safeDate(task.endAt);
+  if (startAt && endAt && endAt >= startAt) {
+    return {
+      start: startOfLocalDay(startAt),
+      end: startOfLocalDay(endAt),
+    };
+  }
+
+  const startDate = parseYMDLocal(task.startDate || null);
+  const endDate = parseYMDLocal(task.endDate || null);
+  if (startDate && endDate && endDate >= startDate) {
+    return {
+      start: startDate,
+      end: endDate,
+    };
+  }
+
+  const dueDate = safeDate(task.dueDate);
+  if (!dueDate) {
+    return { start: null, end: null };
+  }
+
+  const dueDay = startOfLocalDay(dueDate);
+  return {
+    start: dueDay,
+    end: dueDay,
+  };
+}
+
+function taskMatchesDateKey(task, dateKey) {
+  if (!dateKey) return false;
+
+  const { start, end } = resolveTaskDateRange(task);
+  if (!start || !end) return false;
+
+  const startKey = formatYMDLocal(start);
+  const endKey = formatYMDLocal(end);
+  return dateKey >= startKey && dateKey <= endKey;
 }
 
 function merge(left, right) {
@@ -124,6 +178,7 @@ export default function Tasks() {
   const navigate = useNavigate();
 
   const [tasks, setTasks] = useState([]);
+  const [patternStatsByTitle, setPatternStatsByTitle] = useState({});
   const [loading, setLoading] = useState(true);
 
   // calendar + view mode + status
@@ -208,32 +263,67 @@ export default function Tasks() {
     return () => unsub();
   }, [user, authLoading]);
 
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (!user) {
+      setPatternStatsByTitle({});
+      return;
+    }
+
+    const patternsRef = collection(firestore, `users/${user.uid}/patterns`);
+    const unsub = onSnapshot(
+      patternsRef,
+      (snapshot) => {
+        const nextPatternStats = {};
+        snapshot.docs.forEach((patternDoc) => {
+          nextPatternStats[patternDoc.id] = patternDoc.data() || {};
+        });
+        setPatternStatsByTitle(nextPatternStats);
+      },
+      (err) => {
+        console.error("Error loading pattern stats:", err);
+      }
+    );
+
+    return () => unsub();
+  }, [user, authLoading]);
+
   const now = useMemo(() => new Date(), []);
 
   // split tasks into scheduled vs todo using local date logic
   const { scheduledTasks, todoTasks } = useMemo(() => {
     const scheduled = [];
     const todo = [];
+    const rankingNow = new Date();
 
     for (const t of tasks) {
       if (safeDate(t.dueDate)) {
-        scheduled.push(t);
+        const patternStats =
+          patternStatsByTitle[
+            t.normalizedTitle || normalizePatternTitle(t.title)
+          ] || {};
+        const status = getStatus(t, rankingNow);
+        const priority =
+          status === "pending" ? computePriorityScore(t, patternStats) : null;
+
+        scheduled.push({
+          ...t,
+          priorityScore: priority ? priority.final : -1,
+        });
       } else {
         todo.push(t);
       }
     }
 
     return { scheduledTasks: scheduled, todoTasks: todo };
-  }, [tasks]);
+  }, [tasks, patternStatsByTitle]);
 
   // calendar dots: mark days covered by scheduled tasks using local date keys
   // IMPORTANT: only mark **active** scheduled tasks (not finalized/completed/missed)
   const tasksByDate = useMemo(() => {
     const map = {};
     scheduledTasks.forEach((task) => {
-
-      if (!task.startDate && !task.dueDate) return;
-
       const finalized =
         task.finalized === true ||
         task.status === "completed" ||
@@ -243,24 +333,14 @@ export default function Tasks() {
 
       if (finalized) return;
 
-      const startStr = task.startDate || null; // assumed YYYY-MM-DD
-      const endStr = task.endDate || null;
-      const start = parseYMDLocal(startStr);
-      const end = parseYMDLocal(endStr);
+      const { start, end } = resolveTaskDateRange(task);
+      if (!start || !end) return;
 
-      if (start && end && end >= start) {
-        let cur = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-        while (cur <= end) {
-          const key = formatYMDLocal(cur);
-          map[key] = (map[key] || 0) + 1;
-          cur = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 1);
-        }
-      } else {
-        // fallback: use dueDate's local day (only if not finalized)
-        const due = safeDate(task.dueDate);
-        if (!due) return;
-        const key = formatYMDLocal(due);
+      let cur = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+      while (cur <= end) {
+        const key = formatYMDLocal(cur);
         map[key] = (map[key] || 0) + 1;
+        cur = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 1);
       }
     });
     return map;
@@ -276,28 +356,7 @@ export default function Tasks() {
     // selectedDate is a Date object in local timezone
     const selectedKey = formatYMDLocal(selectedDate);
 
-    return scheduledTasks.filter((task) => {
-      // always show split segments so user can manage them easily
-      if (task.isSplitSegment) return true;
-
-      const start = parseYMDLocal(task.startDate || null);
-      const end = parseYMDLocal(task.endDate || null);
-
-      if (start && end) {
-        // check if selectedDate is in [start, end] using local dates
-        const sKey = formatYMDLocal(start);
-        const eKey = formatYMDLocal(end);
-        return selectedKey >= sKey && selectedKey <= eKey;
-      }
-
-      // fallback check: compare dueDate local day
-      const due = safeDate(task.dueDate);
-      if (due) {
-        return formatYMDLocal(due) === selectedKey;
-      }
-
-      return false;
-    });
+    return scheduledTasks.filter((task) => taskMatchesDateKey(task, selectedKey));
   }, [viewMode, selectedDate, scheduledTasks, todoTasks]);
 
   // Apply status filter (default 'pending' hides completed/missed)
@@ -331,7 +390,31 @@ export default function Tasks() {
 
   const handleEditTask = (id) => navigate(`/tasks/${id}/edit`);
   const handleSplitTask = (id) => navigate(`/tasks/${id}/split`);
-  const handleCreateTask = () => {
+  const handleCalendarDateClick = (date) => {
+    setSelectedDate(new Date(date.getFullYear(), date.getMonth(), date.getDate()));
+    setViewMode("scheduled");
+    setStatusFilter("pending");
+  };
+
+  const handleShowAllScheduled = () => {
+    setSelectedDate(null);
+    setViewMode("scheduled");
+    setStatusFilter("pending");
+  };
+
+  const handleCreateTask = async () => {
+    if (user) {
+      const blockedPattern = await getPreventNewTasksBlock(user.uid);
+      if (blockedPattern) {
+        window.alert(
+          buildPreventNewTasksMessage(
+            blockedPattern.normalizedTitle || blockedPattern.id
+          )
+        );
+        return;
+      }
+    }
+
     if (viewMode === "scheduled" && selectedDate) {
       navigate("/tasks/create", { state: { dueDate: formatYMDLocal(selectedDate) } });
     } else {
@@ -346,6 +429,8 @@ export default function Tasks() {
     if (!ok) return;
 
     try {
+      const normalizedTitle =
+        task.normalizedTitle || normalizePatternTitle(task.title);
       const ref = doc(firestore, `users/${user.uid}/tasks/${task.id}`);
       await deleteDoc(ref);
 
@@ -371,6 +456,12 @@ export default function Tasks() {
             console.warn("Could not update parent split flags:", err);
           }
         }
+      }
+
+      if (normalizedTitle) {
+        await recomputeAndSavePatternStats(user.uid, normalizedTitle, {
+          propagate: true,
+        });
       }
     } catch (err) {
       console.error("Error deleting task:", err);
@@ -450,7 +541,7 @@ export default function Tasks() {
                     key={idx}
                     type="button"
                     className={classes}
-                    onClick={() => setSelectedDate(new Date(date.getFullYear(), date.getMonth(), date.getDate()))}
+                    onClick={() => handleCalendarDateClick(date)}
                   >
                     {date.getDate()}
                     {taskCount > 0 && <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-emerald-500" />}
@@ -470,7 +561,7 @@ export default function Tasks() {
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => setSelectedDate(null)}
+                  onClick={handleShowAllScheduled}
                   className="px-3 py-1 rounded-full border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition text-[11px] font-medium"
                 >
                   Show all scheduled
@@ -563,7 +654,15 @@ export default function Tasks() {
               ) : visibleTasks.length === 0 ? (
                 <div className="text-sm text-gray-600 bg-emerald-50/60 rounded-xl border border-dashed border-emerald-200 p-6 text-center">
                   {viewMode === "scheduled" ? (
-                    statusFilter !== "all" ? (
+                    statusFilter !== "all" && selectedDate ? (
+                      <>
+                        No <strong>{statusFilter}</strong> scheduled tasks for{" "}
+                        <span className="font-semibold text-emerald-700">
+                          {selectedDate.toLocaleDateString()}
+                        </span>
+                        .
+                      </>
+                    ) : statusFilter !== "all" ? (
                       <>No <strong>{statusFilter}</strong> scheduled tasks found.</>
                     ) : selectedDate ? (
                       <>No scheduled tasks for <span className="font-semibold text-emerald-700">{selectedDate.toLocaleDateString()}</span>.</>
@@ -582,18 +681,26 @@ export default function Tasks() {
                     typeof task.breakMinutes === "number" ? task.breakMinutes : 0;
 
                   const breakText = breakLabel(breakMinutesValue);
+                  const taskStatus = getStatus(task, now);
+                  const pendingRank =
+                    rankedTasks
+                      .slice(0, index + 1)
+                      .filter(
+                        (candidateTask) => getStatus(candidateTask, now) === "pending"
+                      )
+                      .length;
 
                   return (
                     <div key={task.id} className="flex items-start gap-3">
 
                       {/* 🔥 NUMBER BADGE */}
-                      {viewMode === "scheduled" && (
+                      {viewMode === "scheduled" && taskStatus === "pending" && (
                         <div
                           className={`w-8 h-8 flex items-center justify-center rounded-full text-xs font-bold text-white shadow
-                            ${index === 0 ? "bg-red-500" : "bg-emerald-600"}
+                            ${pendingRank === 1 ? "bg-red-500" : "bg-emerald-600"}
                           `}
                         >
-                          {index + 1}
+                          {pendingRank}
                         </div>
                       )}
 
@@ -602,6 +709,12 @@ export default function Tasks() {
                         <TaskCard
                           task={task}
                           tasks={tasks}
+                          patternStats={
+                            patternStatsByTitle[
+                              task.normalizedTitle ||
+                                normalizePatternTitle(task.title)
+                            ]
+                          }
                           viewMode={viewMode}
                           breakText={breakText}
                           handleOpenTask={handleOpenTask}

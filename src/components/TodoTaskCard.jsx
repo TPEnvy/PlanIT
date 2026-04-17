@@ -16,11 +16,35 @@ import {
   createUserNotification,
   showDeviceNotification,
 } from "../utils/notifications";
+import {
+  buildSuggestSplitMessage,
+  buildPreventNewTasksMessage,
+  normalizePatternTitle,
+  recomputeAndSavePatternStats,
+  shouldPreventNewTasks,
+  shouldSuggestSplit,
+} from "../utils/pattern";
+import { inferAutoTrackedActualMinutes } from "../utils/taskHelpers";
 
 function safeDate(val) {
   if (!val) return null;
   if (typeof val.toDate === "function") return val.toDate();
   return new Date(val);
+}
+
+function formatTrackedMinutes(minutes) {
+  if (minutes == null || Number.isNaN(Number(minutes))) return "0 min";
+
+  const numericMinutes = Number(minutes);
+  if (numericMinutes <= 0) return "0 min";
+
+  const totalSeconds = Math.round(numericMinutes * 60);
+  const wholeMinutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (wholeMinutes === 0) return `${seconds} sec`;
+  if (seconds === 0) return `${wholeMinutes} min`;
+  return `${wholeMinutes} min ${seconds} sec`;
 }
 
 export default function TodoTaskDetail() {
@@ -31,6 +55,7 @@ export default function TodoTaskDetail() {
   const [task, setTask] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -45,7 +70,18 @@ export default function TodoTaskDetail() {
           return;
         }
 
-        setTask({ id: snap.id, ...snap.data() });
+        const data = snap.data() || {};
+        setTask({
+          id: snap.id,
+          ...data,
+          estimatedMinutes:
+            data.estimatedMinutes == null ? null : Number(data.estimatedMinutes),
+          lastActualMinutes:
+            data.lastActualMinutes == null
+              ? null
+              : Number(data.lastActualMinutes),
+          totalActualMinutes: Number(data.totalActualMinutes || 0),
+        });
       } catch (err) {
         console.error(err);
         setError("Failed to load task.");
@@ -58,45 +94,115 @@ export default function TodoTaskDetail() {
   }, [user, taskId]);
 
   const handleComplete = async () => {
+    setError("");
+    setActionLoading(true);
     const ref = doc(firestore, `users/${user.uid}/tasks/${task.id}`);
-    await updateDoc(ref, {
-      completedCount: increment(1),
-      status: "completed",
-      finalized: true,
-      completedAt: serverTimestamp(),
-    });
-    await createUserNotification(user.uid, {
-      title: "Task completed",
-      body: `${task.title || "Untitled task"} was marked as completed.`,
-      taskId: task.id,
-      type: "task_completed",
-    });
-    await showDeviceNotification(
-      "Task completed",
-      `${task.title || "Untitled task"} was marked as completed.`
-    );
-    navigate("/tasks");
+    const resolvedAt = new Date();
+    const actualMinutes = inferAutoTrackedActualMinutes(task, resolvedAt);
+    try {
+      const updatePayload = {
+        completedCount: increment(1),
+        totalCompletions: increment(1),
+        lastOutcome: "completed",
+        status: "completed",
+        finalized: true,
+        lastCompletedAt: serverTimestamp(),
+        completedAt: serverTimestamp(),
+      };
+
+      if (actualMinutes != null) {
+        updatePayload.totalActualMinutes = increment(actualMinutes);
+        updatePayload.lastActualMinutes = actualMinutes;
+      }
+
+      await updateDoc(ref, updatePayload);
+      await createUserNotification(user.uid, {
+        title: "Task completed",
+        body: `${task.title || "Untitled task"} was marked as completed.`,
+        taskId: task.id,
+        type: "task_completed",
+        notificationId: `task_completed_${task.id}`,
+      });
+      await showDeviceNotification(
+        "Task completed",
+        `${task.title || "Untitled task"} was marked as completed.`,
+        {
+          data: { taskId: task.id, type: "task_completed" },
+          tag: `task_completed:${task.id}`,
+        }
+      );
+      await recomputeAndSavePatternStats(
+        user.uid,
+        task.normalizedTitle || normalizePatternTitle(task.title),
+        { propagate: true }
+      );
+      navigate("/tasks");
+    } catch (err) {
+      console.error(err);
+      setError("Failed to mark task as completed.");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleMissed = async () => {
+    setError("");
+    setActionLoading(true);
     const ref = doc(firestore, `users/${user.uid}/tasks/${task.id}`);
-    await updateDoc(ref, {
-      missedCount: increment(1),
-      status: "missed",
-      finalized: true,
-      missedAt: serverTimestamp(),
-    });
-    await createUserNotification(user.uid, {
-      title: "Task missed",
-      body: `${task.title || "Untitled task"} was marked as missed.`,
-      taskId: task.id,
-      type: "task_missed",
-    });
-    await showDeviceNotification(
-      "Task missed",
-      `${task.title || "Untitled task"} was marked as missed.`
-    );
-    navigate("/tasks");
+    try {
+      await updateDoc(ref, {
+        missedCount: increment(1),
+        lastOutcome: "missed",
+        status: "missed",
+        finalized: true,
+        lastMissedAt: serverTimestamp(),
+        missedAt: serverTimestamp(),
+      });
+      await createUserNotification(user.uid, {
+        title: "Task missed",
+        body: `${task.title || "Untitled task"} was marked as missed.`,
+        taskId: task.id,
+        type: "task_missed",
+        notificationId: `task_missed_${task.id}`,
+      });
+      await showDeviceNotification(
+        "Task missed",
+        `${task.title || "Untitled task"} was marked as missed.`,
+        {
+          data: { taskId: task.id, type: "task_missed" },
+          tag: `task_missed:${task.id}`,
+        }
+      );
+      const patternData = await recomputeAndSavePatternStats(
+        user.uid,
+        task.normalizedTitle || normalizePatternTitle(task.title),
+        { propagate: true }
+      );
+      const shouldRecommendSplit =
+        shouldSuggestSplit(patternData) &&
+        !task.isSplitParent &&
+        !task.isSplitSegment;
+
+      if (shouldPreventNewTasks(patternData)) {
+        window.alert(
+          buildPreventNewTasksMessage(
+            patternData.normalizedTitle || task.normalizedTitle || task.title
+          )
+        );
+      } else if (shouldRecommendSplit) {
+        window.alert(
+          buildSuggestSplitMessage(
+            patternData?.normalizedTitle || task.normalizedTitle || task.title
+          )
+        );
+      }
+      navigate("/tasks");
+    } catch (err) {
+      console.error(err);
+      setError("Failed to mark task as missed.");
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -105,6 +211,11 @@ export default function TodoTaskDetail() {
 
     const ref = doc(firestore, `users/${user.uid}/tasks/${task.id}`);
     await deleteDoc(ref);
+    await recomputeAndSavePatternStats(
+      user.uid,
+      task.normalizedTitle || normalizePatternTitle(task.title),
+      { propagate: true }
+    );
     navigate("/tasks");
   };
 
@@ -172,6 +283,20 @@ export default function TodoTaskDetail() {
               <span className="font-semibold text-gray-700">Missed:</span>{" "}
               {task.missedCount || 0}
             </div>
+
+            <div>
+              <span className="font-semibold text-gray-700">
+                Actual tracked:
+              </span>{" "}
+              {formatTrackedMinutes(task.totalActualMinutes)}
+            </div>
+
+            <div>
+              <span className="font-semibold text-gray-700">
+                Last actual:
+              </span>{" "}
+              {formatTrackedMinutes(task.lastActualMinutes)}
+            </div>
           </div>
 
           {/* Description / Notes */}
@@ -192,19 +317,27 @@ export default function TodoTaskDetail() {
             scheduling system and has no deadlines or priority computation.
           </div>
 
+          {error && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {error}
+            </div>
+          )}
+
           {/* Actions */}
           {status === "pending" && (
             <div className="flex flex-wrap gap-3">
               <button
                 onClick={handleComplete}
-                className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition"
+                disabled={actionLoading}
+                className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition disabled:opacity-60"
               >
                 Mark as Completed
               </button>
 
               <button
                 onClick={handleMissed}
-                className="px-5 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition"
+                disabled={actionLoading}
+                className="px-5 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition disabled:opacity-60"
               >
                 Mark as Missed
               </button>

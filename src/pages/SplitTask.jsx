@@ -5,13 +5,21 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   setDoc,
+  Timestamp,
   updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
 import { firestore } from "../server.js/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import Navbar from "../components/Navbar";
+import PageTransition from "../components/PageTransition";
+import {
+  breakLabel,
+  scheduleSuggestedSegments,
+  suggestSegmentTitles,
+} from "../utils/taskHelpers";
 
 export default function SplitTask() {
   const { id } = useParams(); // /tasks/:id/split
@@ -113,18 +121,19 @@ export default function SplitTask() {
     if (!task || !autoSegmentCount) return;
 
     setSegmentTitles((prev) => {
-      const arr = [];
-      for (let i = 0; i < autoSegmentCount; i++) {
-        const existing = prev[i];
+      const suggestedTitles = suggestSegmentTitles(
+        task.title || "Task",
+        autoSegmentCount
+      );
+
+      return Array.from({ length: autoSegmentCount }, (_, index) => {
+        const existing = prev[index];
         if (existing && existing.trim()) {
-          arr.push(existing);
-        } else {
-          arr.push(
-            `${task.title || "Task"} (Part ${i + 1}/${autoSegmentCount})`
-          );
+          return existing;
         }
-      }
-      return arr;
+
+        return suggestedTitles[index];
+      });
     });
   }, [task, autoSegmentCount]);
 
@@ -165,19 +174,47 @@ export default function SplitTask() {
 
     try {
       const tasksRef = collection(firestore, `users/${user.uid}/tasks`);
+      const existingTasksSnap = await getDocs(tasksRef);
+      const existingTasks = existingTasksSnap.docs.map((taskDoc) => ({
+        id: taskDoc.id,
+        ...taskDoc.data(),
+      }));
 
       // compute break recommendation for each segment
       const breakMinutes = computeBreakMinutesForSegment(
         perSegmentMinutes || 0
       );
+      const resolvedSegmentTitles = Array.from(
+        { length: autoSegmentCount },
+        (_, index) =>
+          segmentTitles[index] && segmentTitles[index].trim()
+            ? segmentTitles[index].trim()
+            : `${task.title || "Task"} (Part ${index + 1}/${autoSegmentCount})`
+      );
+      const scheduledPlans =
+        task.mode === "scheduled"
+          ? scheduleSuggestedSegments({
+              task,
+              segmentTitles: resolvedSegmentTitles,
+              segmentMinutes: perSegmentMinutes || 0,
+              breakMinutes,
+              existingTasks,
+            })
+          : null;
+
+      if (task.mode === "scheduled" && !scheduledPlans) {
+        setError(
+          "No open schedule window was found for all generated segments. Free up time or shorten the task before splitting it."
+        );
+        setSaving(false);
+        return;
+      }
 
       // Create each segment
       for (let i = 0; i < autoSegmentCount; i++) {
         const segRef = doc(tasksRef);
-        const segTitle =
-          segmentTitles[i] && segmentTitles[i].trim()
-            ? segmentTitles[i].trim()
-            : `${task.title || "Task"} (Part ${i + 1}/${autoSegmentCount})`;
+        const segTitle = resolvedSegmentTitles[i];
+        const segmentPlan = scheduledPlans?.[i] || null;
 
         const normalizedTitle =
           (task.normalizedTitle || task.title || "task")
@@ -202,23 +239,29 @@ export default function SplitTask() {
           totalCompletions: 0,
           totalActualMinutes: 0,
 
-          // treat segments as flexible to-do steps
-          mode: "floating",
-          startDate: null,
-          startTime: null,
-          endDate: null,
-          endTime: null,
-          dueDate: task.dueDate || null,
+          // treat segments as scheduled tasks 
+          mode: task.mode || "scheduled",
+          startDate: segmentPlan?.startDate || null,
+          startTime: segmentPlan?.startTime || null,
+          endDate: segmentPlan?.endDate || null,
+          endTime: segmentPlan?.endTime || null,
+          dueDate: segmentPlan?.dueDate
+            ? Timestamp.fromDate(segmentPlan.dueDate)
+            : null,
+          startAt: segmentPlan?.startAt
+            ? Timestamp.fromDate(segmentPlan.startAt)
+            : null,
+          endAt: segmentPlan?.endAt
+            ? Timestamp.fromDate(segmentPlan.endAt)
+            : null,
+          urgencyLevel: task.urgencyLevel || null,
+          importanceLevel: task.importanceLevel || null,
+          difficultyLevel: task.difficultyLevel || null,
+          status: "pending",
 
           // per-segment estimate + break for research
           estimatedMinutes: perSegmentMinutes || null,
           breakMinutes: breakMinutes || 0,
-
-          urgencyLevel: null,
-          importanceLevel: null,
-          difficultyLevel: task.difficultyLevel || null,
-          startAt: null,
-          endAt: null,
 
           // split metadata
           isSplitSegment: true,
@@ -261,16 +304,6 @@ export default function SplitTask() {
     else navigate("/tasks");
   };
 
-  // helper for UI display of break
-  function breakLabel(minutes) {
-    if (!minutes || minutes <= 0) return "No break";
-    if (minutes < 60) return `${minutes} min`;
-    const hours = minutes / 60;
-    if (hours < 24) return `${hours.toFixed(hours % 1 === 0 ? 0 : 1)} h`;
-    const days = minutes / 1440;
-    return `${days.toFixed(days % 1 === 0 ? 0 : 1)} day(s)`;
-  }
-
   const recommendedBreakMinutes = useMemo(
     () =>
       perSegmentMinutes
@@ -280,6 +313,7 @@ export default function SplitTask() {
   );
 
   return (
+    <PageTransition>
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-100">
       <Navbar />
 
@@ -308,8 +342,9 @@ export default function SplitTask() {
               </h1>
               <p className="text-sm text-gray-600 mb-4">
                 This tool automatically breaks a long task into smaller,
-                trackable segments and recommends a break duration for each
-                segment using an Adaptive Work–Break Ratio model.
+                trackable segments, derives draft titles from the task text,
+                and redistributes each segment into the next available timeline
+                slot using an Adaptive Work-Break Ratio model.
               </p>
 
               {/* Original task summary */}
@@ -406,7 +441,8 @@ export default function SplitTask() {
                       <span className="font-semibold text-emerald-800">
                         {breakLabel(recommendedBreakMinutes)}
                       </span>{" "}
-                      between segments.
+                      between segments. Scheduled tasks are automatically moved
+                      into open time slots to avoid overlaps.
                     </p>
                   )}
                 </div>
@@ -415,6 +451,10 @@ export default function SplitTask() {
                 <div className="space-y-3">
                   <p className="text-xs font-semibold text-emerald-800">
                     Segment titles
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    Titles are prefilled from the original task so you can keep
+                    the generated workflow or rename any segment before saving.
                   </p>
                   {segmentTitles.map((title, idx) => (
                     <div key={idx}>
@@ -457,5 +497,6 @@ export default function SplitTask() {
         </div>
       </div>
     </div>
+    </PageTransition> 
   );
 }

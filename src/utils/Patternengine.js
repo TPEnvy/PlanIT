@@ -43,6 +43,8 @@ export function computePriorityScore(task = {}, patternStats = {}) {
     final: Number(P.toFixed(4)),
     W,
     EDF,
+    confidence,
+    rawAdaptiveBoost: rawBoost,
     adaptiveBoost: effectiveBoost,
   };
 }
