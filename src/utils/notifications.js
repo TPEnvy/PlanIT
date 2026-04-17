@@ -218,6 +218,11 @@ export async function registerPushToken(uid, options = {}) {
       return null;
     }
 
+    console.log(
+      forceRefresh ? "FCM token refreshed:" : "FCM token registered:",
+      token
+    );
+
     const tokensRef = collection(firestore, `users/${uid}/fcmTokens`);
     const tokenDocRef = doc(tokensRef, installationId);
     const existingInstallationDoc = await getDoc(tokenDocRef);
