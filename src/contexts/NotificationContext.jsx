@@ -23,6 +23,7 @@ import { useAuth } from "./AuthContext";
 import {
   createUserNotification,
   registerPushToken,
+  refreshPushToken,
   requestNotificationPermission,
   showDeviceNotification,
 } from "../utils/notifications";
@@ -307,6 +308,25 @@ export function NotificationProvider({ children }) {
 
     let cancelled = false;
     let removeInteractionListeners = () => {};
+    let removeResyncListeners = () => {};
+
+    const syncGrantedPushToken = async (forceRefresh = false) => {
+      if (
+        cancelled ||
+        typeof window === "undefined" ||
+        !("Notification" in window) ||
+        Notification.permission !== "granted"
+      ) {
+        return;
+      }
+
+      if (forceRefresh) {
+        await refreshPushToken(user.uid);
+        return;
+      }
+
+      await registerPushToken(user.uid);
+    };
 
     const syncPushAccess = async () => {
       if (
@@ -318,7 +338,7 @@ export function NotificationProvider({ children }) {
       }
 
       if (Notification.permission === "granted") {
-        await registerPushToken(user.uid);
+        await syncGrantedPushToken(true);
         return;
       }
 
@@ -332,7 +352,7 @@ export function NotificationProvider({ children }) {
 
         const permission = await requestNotificationPermission();
         if (permission === "granted" && !cancelled) {
-          await registerPushToken(user.uid);
+          await syncGrantedPushToken(true);
         }
       };
 
@@ -349,11 +369,35 @@ export function NotificationProvider({ children }) {
       };
     };
 
+    if (typeof window !== "undefined") {
+      const handleVisibilityOrFocus = async () => {
+        if (document.visibilityState === "hidden") {
+          return;
+        }
+
+        await syncGrantedPushToken(false);
+      };
+
+      window.addEventListener("focus", handleVisibilityOrFocus);
+      window.addEventListener("online", handleVisibilityOrFocus);
+      document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+
+      removeResyncListeners = () => {
+        window.removeEventListener("focus", handleVisibilityOrFocus);
+        window.removeEventListener("online", handleVisibilityOrFocus);
+        document.removeEventListener(
+          "visibilitychange",
+          handleVisibilityOrFocus
+        );
+      };
+    }
+
     syncPushAccess();
 
     return () => {
       cancelled = true;
       removeInteractionListeners();
+      removeResyncListeners();
     };
   }, [user]);
 

@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   getDocs,
   limit,
   query,
@@ -10,12 +11,52 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { getMessaging, getToken, isSupported } from "firebase/messaging";
+import {
+  deleteToken,
+  getMessaging,
+  getToken,
+  isSupported,
+} from "firebase/messaging";
 import app, {
   firebaseVapidKey,
   firestore,
   isWebPushConfigured,
 } from "../server.js/firebase";
+
+const PUSH_INSTALLATION_STORAGE_KEY = "planit_push_installation_id";
+
+function createPushInstallationId() {
+  if (
+    typeof globalThis !== "undefined" &&
+    globalThis.crypto &&
+    typeof globalThis.crypto.randomUUID === "function"
+  ) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `push-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function getPushInstallationId() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const existingId = window.localStorage.getItem(PUSH_INSTALLATION_STORAGE_KEY);
+    if (existingId) {
+      return existingId;
+    }
+
+    const nextId = createPushInstallationId();
+    window.localStorage.setItem(PUSH_INSTALLATION_STORAGE_KEY, nextId);
+    return nextId;
+  } catch (error) {
+    console.warn("Push installation storage unavailable:", error);
+    return createPushInstallationId();
+  }
+}
+
 const defaultNotificationOptions = {
   badge: "/vite.svg",
   icon: "/vite.svg",
@@ -117,7 +158,9 @@ export async function createUserNotification(uid, payload) {
   }
 }
 
-export async function registerPushToken(uid) {
+export async function registerPushToken(uid, options = {}) {
+  const { forceRefresh = false } = options;
+
   if (
     !uid ||
     !app ||
@@ -152,7 +195,20 @@ export async function registerPushToken(uid) {
       return null;
     }
 
+    const installationId = getPushInstallationId();
+    if (!installationId) {
+      return null;
+    }
+
     const messaging = getMessaging(app);
+    if (forceRefresh) {
+      try {
+        await deleteToken(messaging);
+      } catch (error) {
+        console.warn("Existing push token reset failed:", error);
+      }
+    }
+
     const token = await getToken(messaging, {
       vapidKey: firebaseVapidKey,
       serviceWorkerRegistration: registration,
@@ -163,6 +219,8 @@ export async function registerPushToken(uid) {
     }
 
     const tokensRef = collection(firestore, `users/${uid}/fcmTokens`);
+    const tokenDocRef = doc(tokensRef, installationId);
+    const existingInstallationDoc = await getDoc(tokenDocRef);
     const existingTokenQuery = query(
       tokensRef,
       where("token", "==", token),
@@ -172,19 +230,35 @@ export async function registerPushToken(uid) {
 
     if (!existingTokens.empty) {
       await updateDoc(existingTokens.docs[0].ref, {
+        installationId,
         permission: Notification.permission,
         updatedAt: serverTimestamp(),
         userAgent: navigator.userAgent,
       });
+      console.log("Push token synced:", {
+        installationId,
+        tokenSuffix: token.slice(-12),
+      });
       return token;
     }
 
-    await addDoc(tokensRef, {
+    const payload = {
+      installationId,
       token,
       permission: Notification.permission,
       userAgent: navigator.userAgent,
-      createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+    };
+
+    if (!existingInstallationDoc.exists()) {
+      payload.createdAt = serverTimestamp();
+    }
+
+    await setDoc(tokenDocRef, payload, { merge: true });
+
+    console.log(forceRefresh ? "Push token refreshed:" : "Push token synced:", {
+      installationId,
+      tokenSuffix: token.slice(-12),
     });
 
     return token;
@@ -192,4 +266,8 @@ export async function registerPushToken(uid) {
     console.error("Push token registration failed:", error);
     return null;
   }
+}
+
+export async function refreshPushToken(uid) {
+  return registerPushToken(uid, { forceRefresh: true });
 }
