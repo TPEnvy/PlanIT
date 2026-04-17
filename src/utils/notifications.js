@@ -11,9 +11,11 @@ import {
   where,
 } from "firebase/firestore";
 import { getMessaging, getToken, isSupported } from "firebase/messaging";
-import app, { firestore } from "../server.js/firebase";
-
-const firebaseVapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+import app, {
+  firebaseVapidKey,
+  firestore,
+  isWebPushConfigured,
+} from "../server.js/firebase";
 const defaultNotificationOptions = {
   badge: "/vite.svg",
   icon: "/vite.svg",
@@ -120,6 +122,7 @@ export async function registerPushToken(uid) {
     !uid ||
     !app ||
     !firestore ||
+    !isWebPushConfigured ||
     typeof window === "undefined" ||
     !("Notification" in window) ||
     !("serviceWorker" in navigator)

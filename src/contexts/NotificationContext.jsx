@@ -15,7 +15,10 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { getMessaging, isSupported, onMessage } from "firebase/messaging";
-import app, { firestore } from "../server.js/firebase";
+import app, {
+  firestore,
+  isWebPushConfigured,
+} from "../server.js/firebase";
 import { useAuth } from "./AuthContext";
 import {
   createUserNotification,
@@ -25,8 +28,6 @@ import {
 } from "../utils/notifications";
 
 const NotificationContext = createContext();
-const enablePushNotifications =
-  import.meta.env.VITE_ENABLE_PUSH_NOTIFICATIONS !== "false";
 const MAX_REMINDER_DRIFT_MS = 30000;
 const REMINDER_CONFIGS = [
   {
@@ -300,7 +301,7 @@ export function NotificationProvider({ children }) {
   }, [user]);
 
   useEffect(() => {
-    if (!user || !enablePushNotifications) {
+    if (!user || !isWebPushConfigured) {
       return undefined;
     }
 
@@ -357,7 +358,7 @@ export function NotificationProvider({ children }) {
   }, [user]);
 
   useEffect(() => {
-    if (!enablePushNotifications || !app) {
+    if (!isWebPushConfigured || !app) {
       return undefined;
     }
 
