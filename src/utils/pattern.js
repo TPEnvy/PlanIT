@@ -12,9 +12,24 @@ import {
 import { firestore } from "../server.js/firebase";
 import { inferAutoTrackedActualMinutes } from "./taskHelpers";
 
-const ML_API_BASE_URL = (
-  import.meta.env.VITE_ML_API_URL || "http://127.0.0.1:8000"
-).replace(/\/$/, "");
+function resolveMlApiBaseUrl() {
+  const configuredUrl = import.meta.env.VITE_ML_API_URL;
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/$/, "");
+  }
+
+  if (typeof window !== "undefined") {
+    const hostname = window.location.hostname;
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return "http://127.0.0.1:8000";
+    }
+  }
+
+  return null;
+}
+
+const ML_API_BASE_URL = resolveMlApiBaseUrl();
+let hasWarnedAboutMissingMlApi = false;
 
 function toTimestampMillis(value) {
   if (!value) return null;
@@ -69,26 +84,46 @@ function buildHistoricalItem(data) {
 }
 
 async function fetchMlPatternPrediction(userId, title, historical) {
-  const response = await fetch(`${ML_API_BASE_URL}/predict`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      userId,
-      title,
-      historical,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "");
-    throw new Error(
-      `ML API request failed (${response.status}): ${errorText || response.statusText}`
-    );
+  if (!ML_API_BASE_URL) {
+    if (!hasWarnedAboutMissingMlApi) {
+      console.warn(
+        "VITE_ML_API_URL is not configured for this deployment. Falling back to local pattern statistics only."
+      );
+      hasWarnedAboutMissingMlApi = true;
+    }
+    return null;
   }
 
-  return response.json();
+  try {
+    const response = await fetch(`${ML_API_BASE_URL}/predict`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        userId,
+        title,
+        historical,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      console.warn(
+        `ML API request failed (${response.status}). Falling back to local pattern statistics.`,
+        errorText || response.statusText
+      );
+      return null;
+    }
+
+    return response.json();
+  } catch (error) {
+    console.warn(
+      "ML API is unreachable. Falling back to local pattern statistics.",
+      error
+    );
+    return null;
+  }
 }
 
 export function buildPreventNewTasksMessage(title) {
@@ -366,10 +401,15 @@ export async function recomputeAndSavePatternStats(
           pendingTaskCount,
           recoveryUnlocked,
         }).catch((error) => {
+          if (error?.code === "not-found") {
+            return null;
+          }
+
           console.warn(
             `Failed updating task ${taskSnap.id} with pattern stats:`,
             error
           );
+          return null;
         });
       });
 

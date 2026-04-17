@@ -133,6 +133,7 @@ export default function Signup() {
               </label>
               <input
                 type="email"
+                autoComplete="email"
                 required
                 className="w-full mt-1 p-3 border rounded-lg focus:ring-2 focus:ring-emerald-400 outline-none text-sm"
                 placeholder="you@example.com"
@@ -147,6 +148,7 @@ export default function Signup() {
               </label>
               <input
                 type="password"
+                autoComplete="new-password"
                 required
                 className="w-full mt-1 p-3 border rounded-lg focus:ring-2 focus:ring-emerald-400 outline-none text-sm"
                 placeholder="********"
@@ -161,6 +163,7 @@ export default function Signup() {
               </label>
               <input
                 type="password"
+                autoComplete="new-password"
                 required
                 className="w-full mt-1 p-3 border rounded-lg focus:ring-2 focus:ring-emerald-400 outline-none text-sm"
                 placeholder="********"

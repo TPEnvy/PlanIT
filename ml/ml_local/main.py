@@ -39,8 +39,8 @@ app.add_middleware(
 class HistoricalItem(BaseModel):
     completedCount: Optional[int] = 0
     missedCount: Optional[int] = 0
-    estimatedMinutes: Optional[int] = None
-    actualMinutes: Optional[int] = None
+    estimatedMinutes: Optional[float] = None
+    actualMinutes: Optional[float] = None
 
 class PredictRequest(BaseModel):
     title: str
@@ -129,8 +129,8 @@ def compute_from_history_items(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     docCount = len(items)
     total_completed = sum(int(i.get("completedCount", 0) or 0) for i in items)
     total_missed = sum(int(i.get("missedCount", 0) or 0) for i in items)
-    total_est = sum(int(i.get("estimatedMinutes", 0) or 0) for i in items)
-    total_act = sum(int(i.get("actualMinutes", 0) or 0) for i in items)
+    total_est = sum(float(i.get("estimatedMinutes", 0) or 0) for i in items)
+    total_act = sum(float(i.get("actualMinutes", 0) or 0) for i in items)
 
     denom = total_completed + total_missed
     completion_rate = (total_completed / denom) if denom > 0 else 0.0
@@ -183,8 +183,8 @@ def aggregate_tasks_for_normalized(userId: str, normalizedTitle: str) -> List[Di
         items.append({
             "completedCount": int(data.get("completedCount", 0) or 0),
             "missedCount": int(data.get("missedCount", 0) or 0),
-            "estimatedMinutes": int(data.get("estimatedMinutes")) if data.get("estimatedMinutes") is not None else 0,
-            "actualMinutes": int(data.get("totalActualMinutes", 0) or 0),
+            "estimatedMinutes": float(data.get("estimatedMinutes")) if data.get("estimatedMinutes") is not None else 0,
+            "actualMinutes": float(data.get("totalActualMinutes", 0) or 0),
         })
     return items
 
