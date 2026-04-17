@@ -1,6 +1,5 @@
 import React from "react";
-
-/* ---------- helpers ---------- */
+import { shouldSuggestSplit } from "../utils/pattern";
 
 function safeDate(val) {
   if (!val) return null;
@@ -15,9 +14,10 @@ function safeDate(val) {
 function formatYMDLocal(date) {
   if (!date) return null;
   const d = new Date(date);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function breakLabel(minutes) {
@@ -29,20 +29,24 @@ function breakLabel(minutes) {
   return `${days.toFixed(days % 1 === 0 ? 0 : 1)} day(s)`;
 }
 
-/* ---------- component ---------- */
+function sameMoment(left, right) {
+  const leftDate = safeDate(left);
+  const rightDate = safeDate(right);
+
+  if (!leftDate || !rightDate) return false;
+  return leftDate.getTime() === rightDate.getTime();
+}
 
 function TaskCard({
   task,
   tasks,
+  patternStats,
   viewMode,
   handleOpenTask,
   handleEditTask,
   handleSplitTask,
   handleDeleteTask,
-
-
 }) {
-
   const due = safeDate(task.dueDate);
   const dueText =
     viewMode === "scheduled"
@@ -61,15 +65,26 @@ function TaskCard({
     (t) => t.parentTaskId === task.id && t.isSplitSegment === true
   );
 
-  const canSplit =
+  const canSplitFromDuration = estimatedMinutes !== null && estimatedMinutes >= 180;
+  const backendSuggestSplit =
+    shouldSuggestSplit(patternStats) ||
+    shouldSuggestSplit({
+      suggestSplit: task.suggestSplit,
+      docCount: task.patternDocCount,
+      total_missed: task.patternTotalMissed,
+    });
+  const showSplitRecommendation =
+    backendSuggestSplit &&
     !isSplitSegment &&
-    ((estimatedMinutes !== null && estimatedMinutes >= 180) ||
-      task.missedCount >= 2);
+    !(isSplitParent && hasSegments);
+
+  const canSplit = !isSplitSegment && (canSplitFromDuration || backendSuggestSplit);
 
   const startDate = task.startDate || null;
   const startTime = task.startTime || null;
   const endDate = task.endDate || null;
   const endTime = task.endTime || null;
+  const shouldShowDueDate = !sameMoment(task.dueDate, task.endAt);
 
   let durationLabel = "";
   if (estimatedMinutes !== null) {
@@ -104,17 +119,12 @@ function TaskCard({
 
   return (
     <div className="w-full bg-white rounded-2xl shadow-sm p-4 border border-emerald-50 hover:border-emerald-200 hover:shadow-md transition flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-
-      {/* -------- LEFT CONTENT -------- */}
-
       <button
         type="button"
         onClick={() => handleOpenTask(task)}
         className="text-left flex-1"
       >
-
         <div className="flex items-center gap-2 flex-wrap">
-
           <span className="font-semibold text-gray-900">
             {task.title || "Untitled task"}
           </span>
@@ -139,10 +149,7 @@ function TaskCard({
           )}
         </div>
 
-        {/* -------- DETAILS -------- */}
-
         <div className="mt-1 text-xs text-gray-500 flex flex-col gap-1">
-
           {viewMode === "scheduled" && (
             <>
               <div className="flex flex-wrap gap-2">
@@ -164,13 +171,15 @@ function TaskCard({
                   </span>
                 </span>
 
-                <span>
-                  • Due:
-                  <span className="font-medium text-gray-700">
-                    {" "}
-                    {dueText}
+                {shouldShowDueDate && (
+                  <span>
+                    Due:
+                    <span className="font-medium text-gray-700">
+                      {" "}
+                      {dueText}
+                    </span>
                   </span>
-                </span>
+                )}
               </div>
 
               {durationLabel && (
@@ -204,7 +213,6 @@ function TaskCard({
               )}
 
               <div className="flex flex-wrap gap-2 mt-1">
-
                 {urgency && (
                   <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-[10px] text-emerald-800 border border-emerald-100">
                     {urgency === "urgent" ? "Urgent" : "Somewhat urgent"}
@@ -224,16 +232,14 @@ function TaskCard({
                     {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
                   </span>
                 )}
-
               </div>
-
             </>
           )}
 
-          {canSplit && (
+          {showSplitRecommendation && (
             <div className="mt-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 w-fit">
-              ⚠ This task was missed multiple times. Splitting into smaller
-              segments is recommended.
+              This task has been missed at least 3 times across 2 or more
+              records. Splitting it into smaller segments is recommended.
             </div>
           )}
 
@@ -252,14 +258,10 @@ function TaskCard({
               )}
             </div>
           )}
-
         </div>
       </button>
 
-      {/* -------- RIGHT BUTTONS -------- */}
-
       <div className="flex flex-wrap items-center gap-2 justify-start sm:justify-end">
-
         {canSplit && !finalized && (
           <button
             onClick={() => handleSplitTask(task.id)}
@@ -284,7 +286,6 @@ function TaskCard({
         >
           Delete
         </button>
-
       </div>
     </div>
   );

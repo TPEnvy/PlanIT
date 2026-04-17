@@ -5,6 +5,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   serverTimestamp,
   updateDoc,
   setDoc,
@@ -12,6 +13,12 @@ import {
 } from "firebase/firestore";
 import { firestore, auth } from "../server.js/firebase";
 import Navbar from "../components/Navbar";
+import PageTransition from "../components/PageTransition";
+import {
+  buildLocalDateTime,
+  buildScheduleValidationMessage,
+  validateScheduledSlot,
+} from "../utils/taskHelpers";
 
 export default function EditTask() {
   const { id } = useParams();
@@ -37,11 +44,11 @@ export default function EditTask() {
 
   // preserve current status to prevent edits when completed/missed
   const [currentStatus, setCurrentStatus] = useState(null);
+  const [originalPatternKey, setOriginalPatternKey] = useState(null);
+
 
   const makeDateTime = (dateStr, timeStr) => {
-    if (!dateStr || !timeStr) return null;
-    const d = new Date(`${dateStr}T${timeStr}`);
-    return Number.isNaN(d.getTime()) ? null : d;
+    return buildLocalDateTime(dateStr, timeStr);
   };
 
   useEffect(() => {
@@ -64,6 +71,7 @@ export default function EditTask() {
         const data = snap.data();
 
         setTitle(data.title || "");
+        setOriginalPatternKey(data.patternKey || data.normalizedTitle);
         const hasDue = !!data.dueDate;
         setMode(hasDue ? "scheduled" : "todo");
 
@@ -105,6 +113,13 @@ export default function EditTask() {
       ? `${hours.toFixed(hours % 1 === 0 ? 0 : 1)} h`
       : `${estimatedMinutes} min`;
   }, [estimatedMinutes]);
+  
+  function normalizeTitle(t) {
+  return String(t || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -173,12 +188,37 @@ export default function EditTask() {
 
     try {
       const ref = doc(firestore, `users/${user.uid}/tasks/${id}`);
+      const tasksRef = collection(firestore, `users/${user.uid}/tasks`);
+
+      if (isScheduled && start && end) {
+        const existingTasksSnap = await getDocs(tasksRef);
+        const existingTasks = existingTasksSnap.docs.map((taskDoc) => ({
+          id: taskDoc.id,
+          ...taskDoc.data(),
+        }));
+
+        const scheduleValidation = validateScheduledSlot(
+          existingTasks,
+          start,
+          end,
+          { excludeTaskId: id }
+        );
+
+        if (!scheduleValidation.isValid) {
+          setError(buildScheduleValidationMessage(scheduleValidation));
+          setSaving(false);
+          return;
+        }
+      }
 
       const updateData = {
-        title: title.trim(),
-        updatedAt: serverTimestamp(),
-        userId: user.uid,
-      };
+      title: title.trim(),
+      normalizedTitle: normalizeTitle(title), 
+      patternKey: originalPatternKey,        
+      updatedAt: serverTimestamp(),
+      userId: user.uid,
+    };
+
 
       if (isScheduled) {
         updateData.startDate = startDate;
@@ -227,6 +267,13 @@ export default function EditTask() {
       }
 
       await updateDoc(ref, updateData);
+      // Recompute ML pattern after edit
+      import("../utils/pattern").then(({ recomputeAndSavePatternStats }) => {
+        if (originalPatternKey) {
+          recomputeAndSavePatternStats(user.uid, originalPatternKey, { propagate: true });
+        }
+      });
+
 
       // create update notification for UI (best-effort)
       try {
@@ -280,6 +327,7 @@ export default function EditTask() {
   }
 
   return (
+    <PageTransition>
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-500">
       <Navbar />
 
@@ -363,5 +411,6 @@ export default function EditTask() {
         </form>
       </div>
     </div>
+    </PageTransition>
   );
 }
