@@ -61,7 +61,10 @@ const app = firebaseInitError ? null : initializeApp(firebaseConfig);
 export const auth = app ? getAuth(app) : null;
 export const firestore = app ? getFirestore(app) : null;
 export const database = app ? getDatabase(app) : null;
+export const firebaseVapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 export const isPushNotificationsEnabled =
   import.meta.env.VITE_ENABLE_PUSH_NOTIFICATIONS !== "false" && Boolean(app);
+export const isWebPushConfigured =
+  isPushNotificationsEnabled && Boolean(firebaseVapidKey);
 
 export default app;
