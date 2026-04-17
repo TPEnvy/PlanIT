@@ -3,7 +3,11 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { AuthProvider } from "./contexts/AuthContext";
 import { NotificationProvider } from "./contexts/NotificationContext";
-import { isWebPushConfigured } from "./server.js/firebase";
+import {
+  firebaseVapidKey,
+  isPushNotificationsEnabled,
+  isWebPushConfigured,
+} from "./server.js/firebase";
 import "./index.css";
 
 function getMessagingServiceWorkerUrl() {
@@ -13,6 +17,11 @@ function getMessagingServiceWorkerUrl() {
     "firebase-messaging-sw.js",
     `${window.location.origin}${normalizedBaseUrl}`
   ).toString();
+}
+
+function getMessagingServiceWorkerScope() {
+  const baseUrl = import.meta.env.BASE_URL || "/";
+  return baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
 }
 
 async function verifyMessagingServiceWorker(url) {
@@ -35,26 +44,56 @@ async function verifyMessagingServiceWorker(url) {
   }
 }
 
-if (isWebPushConfigured && "serviceWorker" in navigator) {
-  window.addEventListener("load", async () => {
-    const serviceWorkerUrl = getMessagingServiceWorkerUrl();
-    const isValidServiceWorker = await verifyMessagingServiceWorker(
-      serviceWorkerUrl
-    );
-
-    if (!isValidServiceWorker) {
-      return;
+async function registerMessagingServiceWorker() {
+  if (!isWebPushConfigured) {
+    if (isPushNotificationsEnabled && !firebaseVapidKey) {
+      console.warn(
+        "Web push is enabled, but VITE_FIREBASE_VAPID_KEY is missing."
+      );
     }
+    return;
+  }
 
-    navigator.serviceWorker
-      .register(serviceWorkerUrl)
-      .then((registration) => {
-        console.log("Service Worker registered:", registration);
-      })
-      .catch((error) => {
-        console.error("Service Worker registration failed:", error);
-      });
-  });
+  if (!("serviceWorker" in navigator)) {
+    console.warn("Service workers are unavailable in this browser.");
+    return;
+  }
+
+  const serviceWorkerUrl = getMessagingServiceWorkerUrl();
+  const serviceWorkerScope = getMessagingServiceWorkerScope();
+  const isValidServiceWorker = await verifyMessagingServiceWorker(
+    serviceWorkerUrl
+  );
+
+  if (!isValidServiceWorker) {
+    return;
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.register(
+      serviceWorkerUrl,
+      {
+        scope: serviceWorkerScope,
+        updateViaCache: "none",
+      }
+    );
+    console.log("Service Worker registered:", {
+      scope: registration.scope,
+      url: serviceWorkerUrl,
+    });
+  } catch (error) {
+    console.error("Service Worker registration failed:", error);
+  }
+}
+
+if (typeof window !== "undefined") {
+  if (document.readyState === "complete") {
+    registerMessagingServiceWorker();
+  } else {
+    window.addEventListener("load", registerMessagingServiceWorker, {
+      once: true,
+    });
+  }
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(
