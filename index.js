@@ -2,8 +2,8 @@ import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import nodemailer from "nodemailer";
 import admin from "firebase-admin";
+import { Resend } from "resend";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,16 +26,22 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 const MAX_REMINDER_DRIFT_MS = 30000;
-const hasSmtpConfig = Boolean(process.env.SMTP_USER && process.env.SMTP_PASS);
-const transporter = hasSmtpConfig
-  ? nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    })
+const resendApiKey = process.env.RESEND_API_KEY;
+const resendFromEmail = process.env.RESEND_FROM_EMAIL;
+const resendReplyToEmail = process.env.RESEND_REPLY_TO_EMAIL;
+const hasResendConfig = Boolean(resendApiKey && resendFromEmail);
+const resend = hasResendConfig
+  ? new Resend(resendApiKey)
   : null;
+
+function escapeHtml(value = "") {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 function safeDate(value) {
   if (!value) return null;
@@ -63,19 +69,27 @@ async function sendEmail(to, subject, text) {
     return false;
   }
 
-  if (!transporter) {
-    console.warn("SMTP is not configured. Skipping email notification.");
+  if (!resend) {
+    console.warn("Resend is not configured. Skipping email notification.");
     return false;
   }
 
   try {
-    await transporter.sendMail({
-      from: `"Plan-IT" <${process.env.SMTP_USER}>`,
-      to,
+    const { data, error } = await resend.emails.send({
+      from: resendFromEmail,
+      to: [to],
       subject,
-      text,
+      text: String(text || ""),
+      html: `<p>${escapeHtml(text).replace(/\n/g, "<br />")}</p>`,
+      ...(resendReplyToEmail ? { replyTo: resendReplyToEmail } : {}),
     });
-    console.log("Email sent:", subject);
+
+    if (error) {
+      console.error("Email send failed:", error);
+      return false;
+    }
+
+    console.log("Email sent:", subject, data?.id || "");
     return true;
   } catch (error) {
     console.error("Email send failed:", error);
