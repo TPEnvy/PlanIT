@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import admin from "firebase-admin";
 import { Resend } from "resend";
+import sgMail from "@sendgrid/mail";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,6 +38,16 @@ const hasResendConfig = Boolean(resendApiKey && resendFromEmail);
 const resend = hasResendConfig
   ? new Resend(resendApiKey)
   : null;
+const sendGridApiKey = process.env.SENDGRID_API_KEY;
+const sendGridFromEmail =
+  process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_FROM;
+const sendGridReplyToEmail =
+  process.env.SENDGRID_REPLY_TO_EMAIL || process.env.EMAIL_REPLY_TO;
+const hasSendGridConfig = Boolean(sendGridApiKey && sendGridFromEmail);
+
+if (hasSendGridConfig) {
+  sgMail.setApiKey(sendGridApiKey);
+}
 
 function escapeHtml(value = "") {
   return String(value)
@@ -73,12 +84,31 @@ async function sendEmail(to, subject, text) {
     return false;
   }
 
-  if (!resend) {
-    console.warn("Resend is not configured. Skipping email notification.");
+  if (!hasSendGridConfig && !resend) {
+    console.warn(
+      "Email provider is not configured. Skipping email notification."
+    );
     return false;
   }
 
   try {
+    if (hasSendGridConfig) {
+      const [response] = await sgMail.send({
+        from: sendGridFromEmail,
+        to,
+        subject,
+        text: String(text || ""),
+        html: `<p>${escapeHtml(text).replace(/\n/g, "<br />")}</p>`,
+        ...(sendGridReplyToEmail ? { replyTo: sendGridReplyToEmail } : {}),
+      });
+
+      console.log("Email sent via SendGrid:", {
+        subject,
+        statusCode: response?.statusCode,
+      });
+      return true;
+    }
+
     const { data, error } = await resend.emails.send({
       from: resendFromEmail,
       to: [to],
@@ -465,7 +495,13 @@ async function processTask(docSnap) {
   }
 }
 
-console.log("Notification System");
+console.log("Notification System", {
+  emailProvider: hasSendGridConfig
+    ? "sendgrid"
+    : hasResendConfig
+      ? "resend"
+      : "none",
+});
 
 db.collectionGroup("tasks").onSnapshot((snapshot) => {
   snapshot.docChanges().forEach((change) => {
