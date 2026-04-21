@@ -1,5 +1,5 @@
 // src/pages/Tasks.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import TaskCard from "../components/TaskCard";
 import { breakLabel } from "../utils/taskHelpers";
@@ -11,9 +11,7 @@ import {
   doc,
   deleteDoc,
   getDocs,
-  increment,
   where,
-  serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
 import { firestore } from "../server.js/firebase";
@@ -124,29 +122,6 @@ function taskMatchesDateKey(task, dateKey) {
   return dateKey >= startKey && dateKey <= endKey;
 }
 
-function isStoredResolvedTask(task = {}) {
-  return (
-    task.finalized === true ||
-    task.status === "completed" ||
-    task.status === "missed" ||
-    Number(task.completedCount || 0) > 0 ||
-    Number(task.missedCount || 0) > 0
-  );
-}
-
-function resolveMissedCutoff(task) {
-  const cutoff = safeDate(task.endAt) || safeDate(task.dueDate);
-  return cutoff && !Number.isNaN(cutoff.getTime()) ? cutoff : null;
-}
-
-function shouldAutoMarkMissed(task, now) {
-  if (!task || task.mode === "floating" || task.isSplitParent) return false;
-  if (isStoredResolvedTask(task)) return false;
-
-  const cutoff = resolveMissedCutoff(task);
-  return Boolean(cutoff && cutoff < now);
-}
-
 function merge(left, right) {
   const result = [];
   let i = 0;
@@ -179,19 +154,12 @@ function mergeSort(tasks) {
 }
 
 // status calculation (completed / missed / pending) — matches TaskDetail logic
-  function getStatus(task, now) {
+  function getStatus(task) {
     if (task.status === "completed") return "completed";
     if (task.status === "missed") return "missed";
 
     if (Number(task.completedCount || 0) > 0) return "completed";
     if (Number(task.missedCount || 0) > 0) return "missed";
-
-    const due = safeDate(task.dueDate);
-    if (due) {
-      const endOfDue = new Date(due);
-      endOfDue.setHours(23, 59, 59, 999);
-      if (endOfDue < now) return "missed";
-    }
 
     return "pending";
   }
@@ -211,7 +179,6 @@ export default function Tasks() {
   const [selectedDate, setSelectedDate] = useState(null); // Date object (local midnight)
   const [viewMode, setViewMode] = useState("scheduled"); // "scheduled" | "floating"
   const [statusFilter, setStatusFilter] = useState("pending"); // default to pending for nicer UX
-  const autoMissInFlightRef = useRef(new Set());
 
   useEffect(() => {
     // Wait until auth finished resolving
@@ -315,75 +282,17 @@ export default function Tasks() {
     return () => unsub();
   }, [user, authLoading]);
 
-  const now = useMemo(() => new Date(), []);
-
-  useEffect(() => {
-    if (!user || loading) return;
-
-    const currentTime = new Date();
-    const overdueTasks = tasks.filter((task) => {
-      if (!shouldAutoMarkMissed(task, currentTime)) return false;
-      return !autoMissInFlightRef.current.has(task.id);
-    });
-
-    if (!overdueTasks.length) return;
-
-    overdueTasks.forEach((task) => {
-      autoMissInFlightRef.current.add(task.id);
-    });
-
-    const markOverdueTasksMissed = async () => {
-      const updatedTitles = new Set();
-
-      await Promise.allSettled(
-        overdueTasks.map(async (task) => {
-          const taskRef = doc(firestore, `users/${user.uid}/tasks/${task.id}`);
-
-          await updateDoc(taskRef, {
-            missedCount: increment(1),
-            lastOutcome: "missed",
-            status: "missed",
-            finalized: true,
-            missedAt: serverTimestamp(),
-            lastMissedAt: serverTimestamp(),
-          });
-
-          updatedTitles.add(task.normalizedTitle || normalizePatternTitle(task.title));
-        })
-      );
-
-      await Promise.allSettled(
-        [...updatedTitles].map((title) =>
-          recomputeAndSavePatternStats(user.uid, title, { propagate: true })
-        )
-      );
-
-      overdueTasks.forEach((task) => {
-        autoMissInFlightRef.current.delete(task.id);
-      });
-    };
-
-    markOverdueTasksMissed().catch((error) => {
-      console.error("Failed to auto-mark overdue tasks as missed:", error);
-      overdueTasks.forEach((task) => {
-        autoMissInFlightRef.current.delete(task.id);
-      });
-    });
-  }, [user, loading, tasks]);
-
   // split tasks into scheduled vs todo using local date logic
   const { scheduledTasks, todoTasks } = useMemo(() => {
     const scheduled = [];
     const todo = [];
-    const rankingNow = new Date();
-
     for (const t of tasks) {
       if (safeDate(t.dueDate)) {
         const patternStats =
           patternStatsByTitle[
             t.normalizedTitle || normalizePatternTitle(t.title)
           ] || {};
-        const status = getStatus(t, rankingNow);
+        const status = getStatus(t);
         const priority =
           status === "pending" ? computePriorityScore(t, patternStats) : null;
 
@@ -445,9 +354,9 @@ export default function Tasks() {
     if (viewMode === "floating") return baseVisibleTasks; // to-do tasks: show all by default
 
     if (statusFilter === "all") return baseVisibleTasks;
-    return baseVisibleTasks.filter((task) => getStatus(task, now) === statusFilter);
+    return baseVisibleTasks.filter((task) => getStatus(task) === statusFilter);
   },
-   [baseVisibleTasks, statusFilter, viewMode, now]);
+   [baseVisibleTasks, statusFilter, viewMode]);
 
   const rankedTasks = useMemo(() => {
 
@@ -761,12 +670,12 @@ export default function Tasks() {
                     typeof task.breakMinutes === "number" ? task.breakMinutes : 0;
 
                   const breakText = breakLabel(breakMinutesValue);
-                  const taskStatus = getStatus(task, now);
+                  const taskStatus = getStatus(task);
                   const pendingRank =
                     rankedTasks
                       .slice(0, index + 1)
                       .filter(
-                        (candidateTask) => getStatus(candidateTask, now) === "pending"
+                        (candidateTask) => getStatus(candidateTask) === "pending"
                       )
                       .length;
 
