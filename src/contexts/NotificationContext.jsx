@@ -30,6 +30,8 @@ import {
 
 const NotificationContext = createContext();
 const MAX_REMINDER_DRIFT_MS = 30000;
+const NOTIFICATION_PROMPT_DISMISSED_KEY =
+  "planit_notification_prompt_dismissed";
 const REMINDER_CONFIGS = [
   {
     type: "5m",
@@ -105,6 +107,26 @@ function clearReminderTimers(timersRef) {
   timersRef.current.clear();
 }
 
+function getBrowserNotificationPermission() {
+  if (typeof window === "undefined" || !("Notification" in window)) {
+    return "unsupported";
+  }
+
+  return Notification.permission;
+}
+
+function getStoredPromptDismissed() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    return window.localStorage.getItem(NOTIFICATION_PROMPT_DISMISSED_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
 export function useNotifications() {
   return useContext(NotificationContext);
 }
@@ -113,6 +135,13 @@ export function NotificationProvider({ children }) {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [notificationPermission, setNotificationPermission] = useState(
+    getBrowserNotificationPermission
+  );
+  const [notificationPromptDismissed, setNotificationPromptDismissed] =
+    useState(getStoredPromptDismissed);
+  const [notificationPromptLoading, setNotificationPromptLoading] =
+    useState(false);
   const reminderTimersRef = useRef(new Map());
 
   useEffect(() => {
@@ -307,7 +336,6 @@ export function NotificationProvider({ children }) {
     }
 
     let cancelled = false;
-    let removeInteractionListeners = () => {};
     let removeResyncListeners = () => {};
 
     const syncGrantedPushToken = async (forceRefresh = false) => {
@@ -337,36 +365,11 @@ export function NotificationProvider({ children }) {
         return;
       }
 
+      setNotificationPermission(Notification.permission);
+
       if (Notification.permission === "granted") {
         await syncGrantedPushToken(true);
-        return;
       }
-
-      if (Notification.permission !== "default") {
-        return;
-      }
-
-      const handleFirstInteraction = async () => {
-        removeInteractionListeners();
-        if (cancelled) return;
-
-        const permission = await requestNotificationPermission();
-        if (permission === "granted" && !cancelled) {
-          await syncGrantedPushToken(true);
-        }
-      };
-
-      window.addEventListener("pointerdown", handleFirstInteraction, {
-        once: true,
-      });
-      window.addEventListener("keydown", handleFirstInteraction, {
-        once: true,
-      });
-
-      removeInteractionListeners = () => {
-        window.removeEventListener("pointerdown", handleFirstInteraction);
-        window.removeEventListener("keydown", handleFirstInteraction);
-      };
     };
 
     if (typeof window !== "undefined") {
@@ -396,7 +399,6 @@ export function NotificationProvider({ children }) {
 
     return () => {
       cancelled = true;
-      removeInteractionListeners();
       removeResyncListeners();
     };
   }, [user]);
@@ -461,7 +463,43 @@ export function NotificationProvider({ children }) {
     }
   };
 
+  const enableDeviceNotifications = async () => {
+    if (!user || notificationPromptLoading) return;
+
+    setNotificationPromptLoading(true);
+    try {
+      const permission = await requestNotificationPermission();
+      setNotificationPermission(permission);
+
+      if (permission === "granted") {
+        await refreshPushToken(user.uid);
+        setNotificationPromptDismissed(true);
+        try {
+          window.localStorage.setItem(NOTIFICATION_PROMPT_DISMISSED_KEY, "true");
+        } catch {
+          // The prompt can still disappear even if localStorage is unavailable.
+        }
+      }
+    } finally {
+      setNotificationPromptLoading(false);
+    }
+  };
+
+  const dismissNotificationPrompt = () => {
+    setNotificationPromptDismissed(true);
+    try {
+      window.localStorage.setItem(NOTIFICATION_PROMPT_DISMISSED_KEY, "true");
+    } catch {
+      // Ignore storage failures; dismissal only needs to affect this render.
+    }
+  };
+
   const unreadCount = notifications.filter((n) => !n.read).length;
+  const shouldShowNotificationPrompt =
+    Boolean(user) &&
+    isWebPushConfigured &&
+    notificationPermission === "default" &&
+    !notificationPromptDismissed;
 
   return (
     <NotificationContext.Provider
@@ -469,11 +507,49 @@ export function NotificationProvider({ children }) {
         notifications,
         loading,
         unreadCount,
+        notificationPermission,
+        enableDeviceNotifications,
+        dismissNotificationPrompt,
         markAsRead,
         markAllAsRead,
       }}
     >
       {children}
+      {shouldShowNotificationPrompt && (
+        <div className="fixed inset-x-4 bottom-4 z-[9999] mx-auto max-w-md rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-900/20">
+          <div className="space-y-3">
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-emerald-600">
+              Plan-IT reminders
+            </p>
+            <h2 className="text-xl font-bold text-slate-950">
+              Allow device notifications?
+            </h2>
+            <p className="text-sm leading-6 text-slate-600">
+              Get start and deadline reminders even when Plan-IT is running in
+              the background. You can change this anytime in your browser
+              settings.
+            </p>
+          </div>
+
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={enableDeviceNotifications}
+              disabled={notificationPromptLoading}
+              className="rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {notificationPromptLoading ? "Enabling..." : "Allow notifications"}
+            </button>
+            <button
+              type="button"
+              onClick={dismissNotificationPrompt}
+              className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Not now
+            </button>
+          </div>
+        </div>
+      )}
     </NotificationContext.Provider>
   );
 }
