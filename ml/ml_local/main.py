@@ -210,8 +210,10 @@ async def predict(req: PredictRequest):
 
     normalized = normalize_title(title)
 
-    # If historical provided use it
-    if req.historical is not None and len(req.historical) > 0:
+    # If historical is provided, trust the caller even when it is an empty list.
+    # Empty history is a valid "new pattern" case and should not force Firestore.
+    firestore_read_failed = False
+    if req.historical is not None:
         hist_items = [h.dict() if hasattr(h, "dict") else dict(h) for h in req.historical]
     else:
         # If no historical array and userId provided, fetch from Firestore
@@ -219,13 +221,16 @@ async def predict(req: PredictRequest):
             try:
                 hist_items = await asyncio.get_running_loop().run_in_executor(_executor, aggregate_tasks_for_normalized, req.userId, normalized)
             except Exception as e:
-                logger.exception("Failed to aggregate tasks from Firestore: %s", e)
-                raise HTTPException(status_code=500, detail="Failed to read tasks for user")
+                logger.warning("Failed to aggregate tasks from Firestore; using empty history: %s", e)
+                firestore_read_failed = True
+                hist_items = []
         else:
             hist_items = []
 
     pattern = compute_from_history_items(hist_items)
     pattern["normalizedTitle"] = normalized
+    if firestore_read_failed:
+        pattern["explanation"] = f"{pattern.get('explanation', '')}; firestoreFallback=true"
 
     if req.userId:
         found_split_parent = await asyncio.get_running_loop().run_in_executor(_executor, detect_split_parent, req.userId, normalized)
