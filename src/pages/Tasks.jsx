@@ -1,5 +1,5 @@
 // src/pages/Tasks.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import TaskCard from "../components/TaskCard";
 import { breakLabel } from "../utils/taskHelpers";
@@ -11,7 +11,9 @@ import {
   doc,
   deleteDoc,
   getDocs,
+  increment,
   where,
+  serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
 import { firestore } from "../server.js/firebase";
@@ -122,6 +124,29 @@ function taskMatchesDateKey(task, dateKey) {
   return dateKey >= startKey && dateKey <= endKey;
 }
 
+function isStoredResolvedTask(task = {}) {
+  return (
+    task.finalized === true ||
+    task.status === "completed" ||
+    task.status === "missed" ||
+    Number(task.completedCount || 0) > 0 ||
+    Number(task.missedCount || 0) > 0
+  );
+}
+
+function resolveMissedCutoff(task) {
+  const cutoff = safeDate(task.endAt) || safeDate(task.dueDate);
+  return cutoff && !Number.isNaN(cutoff.getTime()) ? cutoff : null;
+}
+
+function shouldAutoMarkMissed(task, now) {
+  if (!task || task.mode === "floating" || task.isSplitParent) return false;
+  if (isStoredResolvedTask(task)) return false;
+
+  const cutoff = resolveMissedCutoff(task);
+  return Boolean(cutoff && cutoff < now);
+}
+
 function merge(left, right) {
   const result = [];
   let i = 0;
@@ -186,6 +211,7 @@ export default function Tasks() {
   const [selectedDate, setSelectedDate] = useState(null); // Date object (local midnight)
   const [viewMode, setViewMode] = useState("scheduled"); // "scheduled" | "floating"
   const [statusFilter, setStatusFilter] = useState("pending"); // default to pending for nicer UX
+  const autoMissInFlightRef = useRef(new Set());
 
   useEffect(() => {
     // Wait until auth finished resolving
@@ -290,6 +316,60 @@ export default function Tasks() {
   }, [user, authLoading]);
 
   const now = useMemo(() => new Date(), []);
+
+  useEffect(() => {
+    if (!user || loading) return;
+
+    const currentTime = new Date();
+    const overdueTasks = tasks.filter((task) => {
+      if (!shouldAutoMarkMissed(task, currentTime)) return false;
+      return !autoMissInFlightRef.current.has(task.id);
+    });
+
+    if (!overdueTasks.length) return;
+
+    overdueTasks.forEach((task) => {
+      autoMissInFlightRef.current.add(task.id);
+    });
+
+    const markOverdueTasksMissed = async () => {
+      const updatedTitles = new Set();
+
+      await Promise.allSettled(
+        overdueTasks.map(async (task) => {
+          const taskRef = doc(firestore, `users/${user.uid}/tasks/${task.id}`);
+
+          await updateDoc(taskRef, {
+            missedCount: increment(1),
+            lastOutcome: "missed",
+            status: "missed",
+            finalized: true,
+            missedAt: serverTimestamp(),
+            lastMissedAt: serverTimestamp(),
+          });
+
+          updatedTitles.add(task.normalizedTitle || normalizePatternTitle(task.title));
+        })
+      );
+
+      await Promise.allSettled(
+        [...updatedTitles].map((title) =>
+          recomputeAndSavePatternStats(user.uid, title, { propagate: true })
+        )
+      );
+
+      overdueTasks.forEach((task) => {
+        autoMissInFlightRef.current.delete(task.id);
+      });
+    };
+
+    markOverdueTasksMissed().catch((error) => {
+      console.error("Failed to auto-mark overdue tasks as missed:", error);
+      overdueTasks.forEach((task) => {
+        autoMissInFlightRef.current.delete(task.id);
+      });
+    });
+  }, [user, loading, tasks]);
 
   // split tasks into scheduled vs todo using local date logic
   const { scheduledTasks, todoTasks } = useMemo(() => {
