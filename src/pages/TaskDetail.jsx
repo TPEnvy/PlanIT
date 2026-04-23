@@ -91,6 +91,16 @@ function describeOverrunRatio(value) {
   return "Overrun";
 }
 
+function isResolvedTask(task) {
+  return (
+    task?.status === "completed" ||
+    task?.status === "missed" ||
+    task?.finalized === true ||
+    Number(task?.completedCount || 0) > 0 ||
+    Number(task?.missedCount || 0) > 0
+  );
+}
+
 export default function TaskDetail() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -228,24 +238,14 @@ export default function TaskDetail() {
   }, [user, task]);
 
   const priority = useMemo(() => {
-    if (!task) {
-      return {
-        final: 0,
-        W: 0,
-        EDF: 0,
-        confidence: 0,
-        rawAdaptiveBoost: 0,
-        adaptiveBoost: 0,
-      };
+    if (!task || isResolvedTask(task)) {
+      return null;
     }
 
     return computePriorityScore(task, patternStats);
   }, [task, patternStats]);
 
-  const isFinalized =
-    task?.status === "completed" ||
-    task?.status === "missed" ||
-    task?.finalized === true;
+  const isFinalized = isResolvedTask(task);
 
   const statusStyle =
     task?.status === "completed"
@@ -503,14 +503,29 @@ export default function TaskDetail() {
                   </div>
 
                   <div className="text-right">
-                    <p className="text-xs text-gray-500">Priority score</p>
-                    <p className="text-2xl font-semibold text-emerald-800">
-                      {priority.final}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      W {priority.W.toFixed(3)} | EDF {priority.EDF.toFixed(5)} |
-                      Applied boost {priority.adaptiveBoost.toFixed(3)}
-                    </p>
+                    {priority ? (
+                      <>
+                        <p className="text-xs text-gray-500">Priority score</p>
+                        <p className="text-2xl font-semibold text-emerald-800">
+                          {priority.final}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          W {priority.W.toFixed(3)} | EDF{" "}
+                          {priority.EDF.toFixed(5)} | Applied boost{" "}
+                          {priority.adaptiveBoost.toFixed(3)}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xs text-gray-500">Priority score</p>
+                        <p className="text-lg font-semibold text-gray-500">
+                          Not ranked
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          W-EDF is only used for pending tasks.
+                        </p>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -739,7 +754,11 @@ export default function TaskDetail() {
                       />
                       <LabelValue
                         label="Pattern confidence"
-                        value={`${(priority.confidence * 100).toFixed(0)}%`}
+                        value={
+                          priority
+                            ? `${(priority.confidence * 100).toFixed(0)}%`
+                            : "N/A"
+                        }
                       />
                       <LabelValue
                         label="Raw adaptive boost"
@@ -751,7 +770,9 @@ export default function TaskDetail() {
                       />
                       <LabelValue
                         label="Applied boost"
-                        value={priority.adaptiveBoost.toFixed(2)}
+                        value={
+                          priority ? priority.adaptiveBoost.toFixed(2) : "N/A"
+                        }
                       />
                       <LabelValue
                         label="ML risk score"

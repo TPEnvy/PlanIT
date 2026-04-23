@@ -1,4 +1,23 @@
 export function computePriorityScore(task = {}, patternStats = {}) {
+  const resolved =
+    task?.finalized === true ||
+    task?.status === "completed" ||
+    task?.status === "missed" ||
+    Number(task?.completedCount || 0) > 0 ||
+    Number(task?.missedCount || 0) > 0;
+
+  if (resolved) {
+    return {
+      final: 0,
+      W: 0,
+      EDF: 0,
+      confidence: 0,
+      rawAdaptiveBoost: 0,
+      adaptiveBoost: 0,
+      active: false,
+    };
+  }
+
   const now = Date.now();
 
   let Tr = 999999;
@@ -46,5 +65,6 @@ export function computePriorityScore(task = {}, patternStats = {}) {
     confidence,
     rawAdaptiveBoost: rawBoost,
     adaptiveBoost: effectiveBoost,
+    active: true,
   };
 }

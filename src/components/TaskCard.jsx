@@ -192,7 +192,7 @@ function TaskCard({
                 </div>
               )}
 
-              {priorityScore !== null && (
+              {!finalized && priorityScore !== null && priorityScore >= 0 && (
                 <div>
                   Priority score:
                   <span className="font-semibold text-emerald-700">
