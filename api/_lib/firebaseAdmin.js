@@ -123,17 +123,6 @@ function loadServiceAccountFromFile(configuredPath) {
 }
 
 function loadServiceAccount() {
-  const bundledServiceAccountPath = path.join(
-    __dirname,
-    "..",
-    "..",
-    "service-account.json"
-  );
-  const bundledAccount = loadServiceAccountFromFile(bundledServiceAccountPath);
-  if (bundledAccount) {
-    return bundledAccount;
-  }
-
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
   if (serviceAccountJson) {
     try {
@@ -157,6 +146,19 @@ function loadServiceAccount() {
     }
   }
 
+  const bundledServiceAccountPath = path.join(
+    __dirname,
+    "..",
+    "..",
+    "service-account.json"
+  );
+  const configuredPath =
+    process.env.GOOGLE_APPLICATION_CREDENTIALS || bundledServiceAccountPath;
+  const configuredAccount = loadServiceAccountFromFile(configuredPath);
+  if (configuredAccount) {
+    return configuredAccount;
+  }
+
   const discreteEnvAccount = loadServiceAccountFromDiscreteEnv();
   if (discreteEnvAccount) {
     return discreteEnvAccount;
@@ -170,12 +172,6 @@ function loadServiceAccount() {
     console.warn(
       "Ignoring incomplete FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY values and falling back to other credential sources."
     );
-  }
-
-  const configuredPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  const configuredAccount = loadServiceAccountFromFile(configuredPath);
-  if (configuredAccount) {
-    return configuredAccount;
   }
 
   throw new AdminConfigurationError(
