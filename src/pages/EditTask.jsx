@@ -5,6 +5,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   serverTimestamp,
   updateDoc,
   setDoc,
@@ -16,10 +17,12 @@ import PageTransition from "../components/PageTransition";
 import ScheduleConflictDialog from "../components/ScheduleConflictDialog";
 import {
   buildLocalDateTime,
+  buildScheduleValidationMessage,
+  findNextAvailableWindow,
   toLocalDateInput,
   toLocalTimeInput,
+  validateScheduledSlot,
 } from "../utils/taskHelpers";
-import { saveScheduledTask } from "../utils/scheduledTaskApi";
 
 export default function EditTask() {
   const { id } = useParams();
@@ -46,6 +49,7 @@ export default function EditTask() {
   // preserve current status to prevent edits when completed/missed
   const [currentStatus, setCurrentStatus] = useState(null);
   const [originalPatternKey, setOriginalPatternKey] = useState(null);
+  const [isSplitSegment, setIsSplitSegment] = useState(false);
   const [scheduleConflictDialog, setScheduleConflictDialog] = useState(null);
 
 
@@ -88,6 +92,7 @@ export default function EditTask() {
         setDifficultyLevel(data.difficultyLevel || "easy");
 
         setCurrentStatus(data.status || "pending");
+        setIsSplitSegment(Boolean(data.isSplitSegment));
       } catch (err) {
         console.error("Error loading task:", err);
         setError("Failed to load task.");
@@ -219,77 +224,55 @@ export default function EditTask() {
     setSaving(true);
 
     try {
+      const ref = doc(firestore, `users/${user.uid}/tasks/${id}`);
+      const normalizedTaskTitle = normalizeTitle(title);
+      const tasksRef = collection(firestore, `users/${user.uid}/tasks`);
+
       if (isScheduled && start && end) {
-        const result = await saveScheduledTask({
-          user,
-          taskId: id,
-          title: title.trim(),
-          patternKey: originalPatternKey,
-          startDate: effectiveStartDate,
-          startTime: effectiveStartTime,
-          endDate: effectiveEndDate,
-          endTime: effectiveEndTime,
-          urgencyLevel,
-          importanceLevel,
-          difficultyLevel,
-          conflictResolution,
-          overrideWindow,
+        const tasksSnapshot = await getDocs(tasksRef);
+        const existingTasks = tasksSnapshot.docs.map((taskDoc) => ({
+          id: taskDoc.id,
+          ...taskDoc.data(),
+        }));
+        const validation = validateScheduledSlot(existingTasks, start, end, {
+          excludeTaskId: id,
+          normalizedTitle: normalizedTaskTitle,
+          candidateIsSplitTask: isSplitSegment,
         });
+        const isReviewableConflict =
+          validation.reason === "overlap" || validation.reason === "duplicate";
 
-        if (!result.ok) {
-          if (
-            result.status === 409 &&
-            result.payload?.code === "SCHEDULE_CONFLICT"
-          ) {
-            setScheduleConflictDialog({
-              validation: result.payload.validation,
-              proposedStart: result.payload.proposedStart,
-              proposedEnd: result.payload.proposedEnd,
-              suggestedWindow: result.payload.suggestedWindow,
-            });
-            setSaving(false);
-            return;
-          }
+        if (
+          !validation.isValid &&
+          isReviewableConflict &&
+          conflictResolution !== "proceed"
+        ) {
+          const suggestedWindow = findNextAvailableWindow({
+            tasks: existingTasks,
+            desiredStart: start,
+            durationMinutes: Math.max(1, nextEstimatedMinutes || 0),
+            excludeTaskId: id,
+            normalizedTitle: normalizedTaskTitle,
+            candidateIsSplitTask: isSplitSegment,
+          });
 
-          setError(
-            result.payload?.message || "Failed to update the scheduled task."
-          );
+          setScheduleConflictDialog({
+            validation,
+            proposedStart: start.toISOString(),
+            proposedEnd: end.toISOString(),
+            suggestedWindow,
+          });
           setSaving(false);
           return;
         }
 
-        import("../utils/pattern").then(({ recomputeAndSavePatternStats }) => {
-          if (originalPatternKey) {
-            recomputeAndSavePatternStats(user.uid, originalPatternKey, {
-              propagate: true,
-            });
-          }
-        });
-
-        try {
-          const notifRef = doc(
-            collection(firestore, `users/${user.uid}/notifications`)
-          );
-          await setDoc(notifRef, {
-            id: notifRef.id,
-            title: "Task updated",
-            body: `"${title.trim() || "Untitled task"}" has been updated.`,
-            type: "task_updated",
-            taskId: id,
-            createdAt: serverTimestamp(),
-            read: false,
-            channel: "all",
-          });
-        } catch (err) {
-          console.error("Failed to create update notification:", err);
+        if (!validation.isValid) {
+          setError(buildScheduleValidationMessage(validation));
+          setSaving(false);
+          return;
         }
-
-        navigate("/tasks");
-        return;
       }
 
-      const ref = doc(firestore, `users/${user.uid}/tasks/${id}`);
-      const normalizedTaskTitle = normalizeTitle(title);
       const updateData = {
         title: title.trim(),
         normalizedTitle: normalizedTaskTitle,

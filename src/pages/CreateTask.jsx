@@ -4,8 +4,10 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   collection,
   doc,
+  getDocs,
   serverTimestamp,
   setDoc,
+  Timestamp,
 } from "firebase/firestore";
 import { firestore } from "../server.js/firebase";
 import Navbar from "../components/Navbar";
@@ -20,10 +22,12 @@ import {
 } from "../utils/pattern";
 import {
   buildLocalDateTime,
+  buildScheduleValidationMessage,
+  findNextAvailableWindow,
   toLocalDateInput,
   toLocalTimeInput,
+  validateScheduledSlot,
 } from "../utils/taskHelpers";
-import { saveScheduledTask } from "../utils/scheduledTaskApi";
 
 export default function CreateTask() {
   const { user } = useAuth();
@@ -169,42 +173,97 @@ export default function CreateTask() {
       let savedTaskId = null;
 
       if (isScheduled && scheduledStart && scheduledEnd) {
-        const result = await saveScheduledTask({
-          user,
+        const tasksSnapshot = await getDocs(tasksRef);
+        const existingTasks = tasksSnapshot.docs.map((taskDoc) => ({
+          id: taskDoc.id,
+          ...taskDoc.data(),
+        }));
+        const validation = validateScheduledSlot(
+          existingTasks,
+          scheduledStart,
+          scheduledEnd,
+          {
+            normalizedTitle,
+            candidateIsSplitTask: false,
+          }
+        );
+        const isReviewableConflict =
+          validation.reason === "overlap" || validation.reason === "duplicate";
+
+        if (
+          !validation.isValid &&
+          isReviewableConflict &&
+          conflictResolution !== "proceed"
+        ) {
+          const suggestedWindow = findNextAvailableWindow({
+            tasks: existingTasks,
+            desiredStart: scheduledStart,
+            durationMinutes: Math.max(
+              1,
+              Math.round(
+                (scheduledEnd.getTime() - scheduledStart.getTime()) / 60000
+              )
+            ),
+            normalizedTitle,
+            candidateIsSplitTask: false,
+          });
+
+          setScheduleConflictDialog({
+            validation,
+            proposedStart: scheduledStart.toISOString(),
+            proposedEnd: scheduledEnd.toISOString(),
+            suggestedWindow,
+          });
+          setSaving(false);
+          return;
+        }
+
+        if (!validation.isValid) {
+          setError(buildScheduleValidationMessage(validation));
+          setSaving(false);
+          return;
+        }
+
+        const newRef = doc(tasksRef);
+        const payload = {
+          id: newRef.id,
+          userId: user.uid,
           title: title.trim(),
+          normalizedTitle,
+          patternKey: normalizedTitle,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          mode: "scheduled",
           startDate: effectiveStartDate,
           startTime: effectiveStartTime,
           endDate: effectiveEndDate,
           endTime: effectiveEndTime,
+          startAt: Timestamp.fromDate(scheduledStart),
+          endAt: Timestamp.fromDate(scheduledEnd),
+          dueDate: Timestamp.fromDate(scheduledEnd),
+          estimatedMinutes: Math.round(
+            (scheduledEnd.getTime() - scheduledStart.getTime()) / 60000
+          ),
+          breakMinutes: null,
           urgencyLevel,
           importanceLevel,
           difficultyLevel,
-          conflictResolution,
-          overrideWindow,
-        });
+          completedCount: 0,
+          missedCount: 0,
+          totalCompletions: 0,
+          totalActualMinutes: 0,
+          lastCompletedAt: null,
+          lastMissedAt: null,
+          status: "pending",
+          finalized: false,
+          isSplitParent: false,
+          isSplitSegment: false,
+          splitSegmentCount: null,
+          parentTaskId: null,
+        };
 
-        if (!result.ok) {
-          if (
-            result.status === 409 &&
-            result.payload?.code === "SCHEDULE_CONFLICT"
-          ) {
-            setScheduleConflictDialog({
-              validation: result.payload.validation,
-              proposedStart: result.payload.proposedStart,
-              proposedEnd: result.payload.proposedEnd,
-              suggestedWindow: result.payload.suggestedWindow,
-            });
-            setSaving(false);
-            return;
-          }
-
-          setError(
-            result.payload?.message || "Failed to create the scheduled task."
-          );
-          setSaving(false);
-          return;
-        }
-        savedTaskId = result.payload?.task?.taskId || null;
+        await setDoc(newRef, payload);
+        savedTaskId = newRef.id;
       } else {
         const newRef = doc(tasksRef);
         const payload = {
