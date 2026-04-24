@@ -4,13 +4,12 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   collection,
   doc,
-  getDocs,
   serverTimestamp,
   setDoc,
-  Timestamp,
 } from "firebase/firestore";
 import { firestore } from "../server.js/firebase";
 import Navbar from "../components/Navbar";
+import ScheduleConflictDialog from "../components/ScheduleConflictDialog";
 import { useAuth } from "../contexts/AuthContext";
 import {
   buildPreventNewTasksMessage,
@@ -21,9 +20,10 @@ import {
 } from "../utils/pattern";
 import {
   buildLocalDateTime,
-  buildScheduleValidationMessage,
-  validateScheduledSlot,
+  toLocalDateInput,
+  toLocalTimeInput,
 } from "../utils/taskHelpers";
+import { saveScheduledTask } from "../utils/scheduledTaskApi";
 
 export default function CreateTask() {
   const { user } = useAuth();
@@ -48,6 +48,7 @@ export default function CreateTask() {
   const [estimatedMinutesManual, setEstimatedMinutesManual] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [scheduleConflictDialog, setScheduleConflictDialog] = useState(null);
 
   const estimatedMinutes = useMemo(() => {
     if (!isScheduled) {
@@ -76,11 +77,21 @@ export default function CreateTask() {
     return Math.round((end.getTime() - start.getTime()) / 60000);
   }, [isScheduled, startDate, startTime, endDate, endTime, estimatedMinutesManual]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (e, submitOptions = {}) => {
+    e?.preventDefault?.();
+    const { conflictResolution = "default", overrideWindow = null } =
+      submitOptions;
     setError("");
+    if (conflictResolution === "default") {
+      setScheduleConflictDialog(null);
+    }
+
     let scheduledStart = null;
     let scheduledEnd = null;
+    let effectiveStartDate = startDate;
+    let effectiveStartTime = startTime;
+    let effectiveEndDate = endDate;
+    let effectiveEndTime = endTime;
 
     if (!user) {
       setError("You must be signed in to create a task.");
@@ -93,13 +104,13 @@ export default function CreateTask() {
     }
 
     if (isScheduled) {
-      if (!startDate || !startTime || !endDate || !endTime) {
+      if (!effectiveStartDate || !effectiveStartTime || !effectiveEndDate || !effectiveEndTime) {
         setError("Start and end date/time are required for scheduled tasks.");
         return;
       }
 
-      const start = buildLocalDateTime(startDate, startTime);
-      const end = buildLocalDateTime(endDate, endTime);
+      const start = buildLocalDateTime(effectiveStartDate, effectiveStartTime);
+      const end = buildLocalDateTime(effectiveEndDate, effectiveEndTime);
 
       if (!start || !end) {
         setError("Invalid start or end date/time.");
@@ -120,6 +131,25 @@ export default function CreateTask() {
       scheduledEnd = end;
     }
 
+    if (
+      isScheduled &&
+      conflictResolution === "suggested" &&
+      overrideWindow?.start &&
+      overrideWindow?.end
+    ) {
+      scheduledStart = new Date(overrideWindow.start);
+      scheduledEnd = new Date(overrideWindow.end);
+      effectiveStartDate = toLocalDateInput(scheduledStart);
+      effectiveStartTime = toLocalTimeInput(scheduledStart);
+      effectiveEndDate = toLocalDateInput(scheduledEnd);
+      effectiveEndTime = toLocalTimeInput(scheduledEnd);
+
+      setStartDate(effectiveStartDate);
+      setStartTime(effectiveStartTime);
+      setEndDate(effectiveEndDate);
+      setEndTime(effectiveEndTime);
+    }
+
     setSaving(true);
 
     try {
@@ -136,79 +166,85 @@ export default function CreateTask() {
 
       const normalizedTitle = normalizePatternTitle(title);
       const tasksRef = collection(firestore, `users/${user.uid}/tasks`);
+      let savedTaskId = null;
 
       if (isScheduled && scheduledStart && scheduledEnd) {
-        const existingTasksSnap = await getDocs(tasksRef);
-        const existingTasks = existingTasksSnap.docs.map((taskDoc) => ({
-          id: taskDoc.id,
-          ...taskDoc.data(),
-        }));
+        const result = await saveScheduledTask({
+          user,
+          title: title.trim(),
+          startDate: effectiveStartDate,
+          startTime: effectiveStartTime,
+          endDate: effectiveEndDate,
+          endTime: effectiveEndTime,
+          urgencyLevel,
+          importanceLevel,
+          difficultyLevel,
+          conflictResolution,
+          overrideWindow,
+        });
 
-        const scheduleValidation = validateScheduledSlot(
-          existingTasks,
-          scheduledStart,
-          scheduledEnd
-        );
+        if (!result.ok) {
+          if (
+            result.status === 409 &&
+            result.payload?.code === "SCHEDULE_CONFLICT"
+          ) {
+            setScheduleConflictDialog({
+              validation: result.payload.validation,
+              proposedStart: result.payload.proposedStart,
+              proposedEnd: result.payload.proposedEnd,
+              suggestedWindow: result.payload.suggestedWindow,
+            });
+            setSaving(false);
+            return;
+          }
 
-        if (!scheduleValidation.isValid) {
-          const message = buildScheduleValidationMessage(scheduleValidation);
-          setError(message);
+          setError(
+            result.payload?.message || "Failed to create the scheduled task."
+          );
           setSaving(false);
           return;
         }
+        savedTaskId = result.payload?.task?.taskId || null;
+      } else {
+        const newRef = doc(tasksRef);
+        const payload = {
+          id: newRef.id,
+          userId: user.uid,
+          title: title.trim(),
+          normalizedTitle,
+          patternKey: normalizedTitle,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          mode: "floating",
+          startDate: null,
+          startTime: null,
+          endDate: null,
+          endTime: null,
+          startAt: null,
+          endAt: null,
+          dueDate: null,
+          estimatedMinutes: estimatedMinutes != null ? estimatedMinutes : null,
+          breakMinutes: null,
+          urgencyLevel: null,
+          importanceLevel: null,
+          difficultyLevel: null,
+          completedCount: 0,
+          missedCount: 0,
+          totalCompletions: 0,
+          totalActualMinutes: 0,
+          lastCompletedAt: null,
+          lastMissedAt: null,
+          status: "pending",
+          finalized: false,
+          isSplitParent: false,
+          isSplitSegment: false,
+          splitSegmentCount: null,
+          parentTaskId: null,
+        };
+
+        await setDoc(newRef, payload);
+        savedTaskId = newRef.id;
       }
-
-      const newRef = doc(tasksRef);
-
-      const startAt =
-        isScheduled && startDate && startTime
-          ? Timestamp.fromDate(scheduledStart)
-          : null;
-      const endAt =
-        isScheduled && endDate && endTime
-          ? Timestamp.fromDate(scheduledEnd)
-          : null;
-      const dueDateVal =
-        isScheduled && endDate && endTime
-          ? Timestamp.fromDate(scheduledEnd)
-          : null;
-
-      const payload = {
-        id: newRef.id,
-        userId: user.uid,
-        title: title.trim(),
-        normalizedTitle,
-        patternKey: normalizedTitle,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        mode: isScheduled ? "scheduled" : "floating",
-        startDate: isScheduled ? startDate : null,
-        startTime: isScheduled ? startTime : null,
-        endDate: isScheduled ? endDate : null,
-        endTime: isScheduled ? endTime : null,
-        startAt,
-        endAt,
-        dueDate: dueDateVal,
-        estimatedMinutes: estimatedMinutes != null ? estimatedMinutes : null,
-        breakMinutes: null,
-        urgencyLevel: isScheduled ? urgencyLevel : null,
-        importanceLevel: isScheduled ? importanceLevel : null,
-        difficultyLevel: isScheduled ? difficultyLevel : null,
-        completedCount: 0,
-        missedCount: 0,
-        totalCompletions: 0,
-        totalActualMinutes: 0,
-        lastCompletedAt: null,
-        lastMissedAt: null,
-        status: "pending",
-        finalized: false,
-        isSplitParent: false,
-        isSplitSegment: false,
-        splitSegmentCount: null,
-        parentTaskId: null,
-      };
-
-      await setDoc(newRef, payload);
       const patternData = await recomputeAndSavePatternStats(
         user.uid,
         normalizedTitle,
@@ -232,9 +268,9 @@ export default function CreateTask() {
         await setDoc(notifRef, {
           id: notifRef.id,
           title: "New task created",
-          body: `"${payload.title}" was added to your tasks.`,
+          body: `"${title.trim()}" was added to your tasks.`,
           type: "task_created",
-          taskId: newRef.id,
+          taskId: savedTaskId,
           createdAt: serverTimestamp(),
           read: false,
           channel: "all",
@@ -468,6 +504,32 @@ export default function CreateTask() {
           </div>
         </form>
       </div>
+
+      <ScheduleConflictDialog
+        open={Boolean(scheduleConflictDialog)}
+        validation={scheduleConflictDialog?.validation}
+        proposedStart={scheduleConflictDialog?.proposedStart}
+        proposedEnd={scheduleConflictDialog?.proposedEnd}
+        suggestedWindow={scheduleConflictDialog?.suggestedWindow}
+        submitting={saving}
+        onClose={() => setScheduleConflictDialog(null)}
+        onProceed={() => {
+          setScheduleConflictDialog(null);
+          handleSubmit(null, { conflictResolution: "proceed" });
+        }}
+        onUseSuggestion={() => {
+          const suggestedWindow = scheduleConflictDialog?.suggestedWindow;
+          if (!suggestedWindow?.start || !suggestedWindow?.end) {
+            return;
+          }
+
+          setScheduleConflictDialog(null);
+          handleSubmit(null, {
+            conflictResolution: "suggested",
+            overrideWindow: suggestedWindow,
+          });
+        }}
+      />
     </div>
   );
 }

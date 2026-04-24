@@ -1,3 +1,5 @@
+import normalizeTitle from "./normalizeTitle";
+
 export const DAILY_WORKLOAD_LIMIT_MINUTES = 12 * 60;
 export const MAX_SIMULTANEOUS_SCHEDULED_TASKS = 1;
 export const DEFAULT_SEARCH_STEP_MINUTES = 15;
@@ -166,6 +168,34 @@ export function findScheduleConflicts(
   });
 }
 
+export function findDuplicateScheduledTasks(
+  tasks,
+  normalizedTitle,
+  start,
+  end,
+  { excludeTaskId = null, candidateIsSplitTask = false } = {}
+) {
+  const candidateTitle = normalizeTitle(normalizedTitle);
+
+  if (!candidateTitle || candidateIsSplitTask) {
+    return [];
+  }
+
+  return findScheduleConflicts(tasks, start, end, { excludeTaskId }).filter(
+    (task) => {
+      if (task?.isSplitParent || task?.isSplitSegment) {
+        return false;
+      }
+
+      const taskTitle = normalizeTitle(
+        task?.normalizedTitle || task?.patternKey || task?.title || ""
+      );
+
+      return taskTitle === candidateTitle;
+    }
+  );
+}
+
 export function getScheduledMinutesForDay(
   tasks,
   date,
@@ -192,6 +222,9 @@ export function validateScheduledSlot(
   end,
   {
     excludeTaskId = null,
+    normalizedTitle = "",
+    candidateIsSplitTask = false,
+    checkDuplicateTitles = true,
     maxConcurrent = MAX_SIMULTANEOUS_SCHEDULED_TASKS,
     dailyLimitMinutes = DAILY_WORKLOAD_LIMIT_MINUTES,
   } = {}
@@ -203,6 +236,7 @@ export function validateScheduledSlot(
     return {
       isValid: false,
       conflicts: [],
+      duplicates: [],
       overloadedDays: [],
       reason: "invalid_range",
     };
@@ -211,6 +245,12 @@ export function validateScheduledSlot(
   const conflicts = findScheduleConflicts(tasks, candidateStart, candidateEnd, {
     excludeTaskId,
   });
+  const duplicates = checkDuplicateTitles
+    ? findDuplicateScheduledTasks(tasks, normalizedTitle, candidateStart, candidateEnd, {
+        excludeTaskId,
+        candidateIsSplitTask,
+      })
+    : [];
   const overloadedDays = [];
 
   let cursor = startOfLocalDay(candidateStart);
@@ -242,8 +282,12 @@ export function validateScheduledSlot(
   }
 
   const exceedsSlotCapacity = conflicts.length >= maxConcurrent;
-  const isValid = !exceedsSlotCapacity && overloadedDays.length === 0;
-  const reason = exceedsSlotCapacity
+  const hasDuplicateOverlap = duplicates.length > 0;
+  const isValid =
+    !hasDuplicateOverlap && !exceedsSlotCapacity && overloadedDays.length === 0;
+  const reason = hasDuplicateOverlap
+    ? "duplicate"
+    : exceedsSlotCapacity
     ? "overlap"
     : overloadedDays.length > 0
     ? "daily_limit"
@@ -252,6 +296,7 @@ export function validateScheduledSlot(
   return {
     isValid,
     conflicts,
+    duplicates,
     overloadedDays,
     reason,
   };
@@ -264,6 +309,17 @@ export function buildScheduleValidationMessage(validation) {
 
   if (validation.reason === "invalid_range") {
     return "The selected schedule is invalid.";
+  }
+
+  if (validation.reason === "duplicate" && validation.duplicates.length > 0) {
+    const names = validation.duplicates
+      .slice(0, 3)
+      .map((task) => `"${task.title || "Untitled task"}"`);
+    const moreCount = validation.duplicates.length - names.length;
+    const moreLabel =
+      moreCount > 0 ? ` and ${moreCount} more matching task(s)` : "";
+
+    return `A task with the same title is already scheduled in that time frame: ${names.join(", ")}${moreLabel}. Choose a different time or continue anyway if that overlap is intentional.`;
   }
 
   if (validation.reason === "overlap" && validation.conflicts.length > 0) {
@@ -357,6 +413,9 @@ export function findNextAvailableWindow({
   desiredStart,
   durationMinutes,
   excludeTaskId = null,
+  normalizedTitle = "",
+  candidateIsSplitTask = false,
+  checkDuplicateTitles = true,
   preferredStartMinutes = 8 * 60,
   stepMinutes = DEFAULT_SEARCH_STEP_MINUTES,
   maxSearchDays = DEFAULT_SEGMENT_SEARCH_DAYS,
@@ -376,6 +435,9 @@ export function findNextAvailableWindow({
     const end = new Date(cursor.getTime() + durationMinutes * 60000);
     const validation = validateScheduledSlot(tasks, cursor, end, {
       excludeTaskId,
+      normalizedTitle,
+      candidateIsSplitTask,
+      checkDuplicateTitles,
       maxConcurrent,
       dailyLimitMinutes,
     });
