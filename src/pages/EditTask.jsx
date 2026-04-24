@@ -5,7 +5,6 @@ import {
   collection,
   doc,
   getDoc,
-  getDocs,
   serverTimestamp,
   updateDoc,
   setDoc,
@@ -14,11 +13,13 @@ import {
 import { firestore, auth } from "../server.js/firebase";
 import Navbar from "../components/Navbar";
 import PageTransition from "../components/PageTransition";
+import ScheduleConflictDialog from "../components/ScheduleConflictDialog";
 import {
   buildLocalDateTime,
-  buildScheduleValidationMessage,
-  validateScheduledSlot,
+  toLocalDateInput,
+  toLocalTimeInput,
 } from "../utils/taskHelpers";
+import { saveScheduledTask } from "../utils/scheduledTaskApi";
 
 export default function EditTask() {
   const { id } = useParams();
@@ -45,6 +46,7 @@ export default function EditTask() {
   // preserve current status to prevent edits when completed/missed
   const [currentStatus, setCurrentStatus] = useState(null);
   const [originalPatternKey, setOriginalPatternKey] = useState(null);
+  const [scheduleConflictDialog, setScheduleConflictDialog] = useState(null);
 
 
   const makeDateTime = (dateStr, timeStr) => {
@@ -115,15 +117,20 @@ export default function EditTask() {
   }, [estimatedMinutes]);
   
   function normalizeTitle(t) {
-  return String(t || "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLowerCase();
-}
+    return String(t || "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toLowerCase();
+  }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (e, submitOptions = {}) => {
+    e?.preventDefault?.();
+    const { conflictResolution = "default", overrideWindow = null } =
+      submitOptions;
     setError("");
+    if (conflictResolution === "default") {
+      setScheduleConflictDialog(null);
+    }
 
     if (!user) {
       setError("User not authenticated.");
@@ -148,19 +155,23 @@ export default function EditTask() {
     let dueDateValue = null;
     let start = null;
     let end = null;
+    let effectiveStartDate = startDate;
+    let effectiveStartTime = startTime;
+    let effectiveEndDate = endDate;
+    let effectiveEndTime = endTime;
 
     if (isScheduled) {
-      if (!startDate || !endDate) {
+      if (!effectiveStartDate || !effectiveEndDate) {
         setError("Start date and end date are required for scheduled tasks.");
         return;
       }
-      if (!startTime || !endTime) {
+      if (!effectiveStartTime || !effectiveEndTime) {
         setError("Start time and end time are required for scheduled tasks.");
         return;
       }
 
-      start = makeDateTime(startDate, startTime);
-      end = makeDateTime(endDate, endTime);
+      start = makeDateTime(effectiveStartDate, effectiveStartTime);
+      end = makeDateTime(effectiveEndDate, effectiveEndTime);
 
       if (!start || !end) {
         setError("Invalid date or time.");
@@ -184,47 +195,115 @@ export default function EditTask() {
       dueDateValue = end;
     }
 
+    if (
+      isScheduled &&
+      conflictResolution === "suggested" &&
+      overrideWindow?.start &&
+      overrideWindow?.end
+    ) {
+      start = new Date(overrideWindow.start);
+      end = new Date(overrideWindow.end);
+      effectiveStartDate = toLocalDateInput(start);
+      effectiveStartTime = toLocalTimeInput(start);
+      effectiveEndDate = toLocalDateInput(end);
+      effectiveEndTime = toLocalTimeInput(end);
+      nextEstimatedMinutes = Math.round((end.getTime() - start.getTime()) / 60000);
+      dueDateValue = end;
+
+      setStartDate(effectiveStartDate);
+      setStartTime(effectiveStartTime);
+      setEndDate(effectiveEndDate);
+      setEndTime(effectiveEndTime);
+    }
+
     setSaving(true);
 
     try {
-      const ref = doc(firestore, `users/${user.uid}/tasks/${id}`);
-      const tasksRef = collection(firestore, `users/${user.uid}/tasks`);
-
       if (isScheduled && start && end) {
-        const existingTasksSnap = await getDocs(tasksRef);
-        const existingTasks = existingTasksSnap.docs.map((taskDoc) => ({
-          id: taskDoc.id,
-          ...taskDoc.data(),
-        }));
+        const result = await saveScheduledTask({
+          user,
+          taskId: id,
+          title: title.trim(),
+          patternKey: originalPatternKey,
+          startDate: effectiveStartDate,
+          startTime: effectiveStartTime,
+          endDate: effectiveEndDate,
+          endTime: effectiveEndTime,
+          urgencyLevel,
+          importanceLevel,
+          difficultyLevel,
+          conflictResolution,
+          overrideWindow,
+        });
 
-        const scheduleValidation = validateScheduledSlot(
-          existingTasks,
-          start,
-          end,
-          { excludeTaskId: id }
-        );
+        if (!result.ok) {
+          if (
+            result.status === 409 &&
+            result.payload?.code === "SCHEDULE_CONFLICT"
+          ) {
+            setScheduleConflictDialog({
+              validation: result.payload.validation,
+              proposedStart: result.payload.proposedStart,
+              proposedEnd: result.payload.proposedEnd,
+              suggestedWindow: result.payload.suggestedWindow,
+            });
+            setSaving(false);
+            return;
+          }
 
-        if (!scheduleValidation.isValid) {
-          setError(buildScheduleValidationMessage(scheduleValidation));
+          setError(
+            result.payload?.message || "Failed to update the scheduled task."
+          );
           setSaving(false);
           return;
         }
+
+        import("../utils/pattern").then(({ recomputeAndSavePatternStats }) => {
+          if (originalPatternKey) {
+            recomputeAndSavePatternStats(user.uid, originalPatternKey, {
+              propagate: true,
+            });
+          }
+        });
+
+        try {
+          const notifRef = doc(
+            collection(firestore, `users/${user.uid}/notifications`)
+          );
+          await setDoc(notifRef, {
+            id: notifRef.id,
+            title: "Task updated",
+            body: `"${title.trim() || "Untitled task"}" has been updated.`,
+            type: "task_updated",
+            taskId: id,
+            createdAt: serverTimestamp(),
+            read: false,
+            channel: "all",
+          });
+        } catch (err) {
+          console.error("Failed to create update notification:", err);
+        }
+
+        navigate("/tasks");
+        return;
       }
 
+      const ref = doc(firestore, `users/${user.uid}/tasks/${id}`);
+      const normalizedTaskTitle = normalizeTitle(title);
       const updateData = {
-      title: title.trim(),
-      normalizedTitle: normalizeTitle(title), 
-      patternKey: originalPatternKey,        
-      updatedAt: serverTimestamp(),
-      userId: user.uid,
-    };
+        title: title.trim(),
+        normalizedTitle: normalizedTaskTitle,
+        patternKey: originalPatternKey,
+        updatedAt: serverTimestamp(),
+        userId: user.uid,
+      };
 
 
       if (isScheduled) {
-        updateData.startDate = startDate;
-        updateData.startTime = startTime;
-        updateData.endDate = endDate;
-        updateData.endTime = endTime;
+        updateData.startDate = effectiveStartDate;
+        updateData.startTime = effectiveStartTime;
+        updateData.endDate = effectiveEndDate;
+        updateData.endTime = effectiveEndTime;
         updateData.dueDate = dueDateValue ? Timestamp.fromDate(dueDateValue) : null;
         updateData.estimatedMinutes = nextEstimatedMinutes;
         updateData.urgencyLevel = urgencyLevel;
@@ -410,6 +489,31 @@ export default function EditTask() {
           </div>
         </form>
       </div>
+      <ScheduleConflictDialog
+        open={Boolean(scheduleConflictDialog)}
+        validation={scheduleConflictDialog?.validation}
+        proposedStart={scheduleConflictDialog?.proposedStart}
+        proposedEnd={scheduleConflictDialog?.proposedEnd}
+        suggestedWindow={scheduleConflictDialog?.suggestedWindow}
+        submitting={saving}
+        onClose={() => setScheduleConflictDialog(null)}
+        onProceed={() => {
+          setScheduleConflictDialog(null);
+          handleSubmit(null, { conflictResolution: "proceed" });
+        }}
+        onUseSuggestion={() => {
+          const suggestedWindow = scheduleConflictDialog?.suggestedWindow;
+          if (!suggestedWindow?.start || !suggestedWindow?.end) {
+            return;
+          }
+
+          setScheduleConflictDialog(null);
+          handleSubmit(null, {
+            conflictResolution: "suggested",
+            overrideWindow: suggestedWindow,
+          });
+        }}
+      />
     </div>
     </PageTransition>
   );
