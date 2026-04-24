@@ -452,6 +452,16 @@ export default async function handler(req, res) {
       task: result,
     });
   } catch (error) {
+    if (
+      error?.message === "Missing bearer token." ||
+      error?.code?.startsWith?.("auth/")
+    ) {
+      return res.status(401).json({
+        code: "UNAUTHORIZED",
+        message: "You must be signed in to save scheduled tasks.",
+      });
+    }
+
     if (error instanceof HttpError) {
       return res.status(error.status).json({
         code: error.code,

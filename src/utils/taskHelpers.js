@@ -1,4 +1,4 @@
-import normalizeTitle from "./normalizeTitle";
+import normalizeTitle from "./normalizeTitle.js";
 
 export const DAILY_WORKLOAD_LIMIT_MINUTES = 12 * 60;
 export const MAX_SIMULTANEOUS_SCHEDULED_TASKS = 1;

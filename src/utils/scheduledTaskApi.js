@@ -41,9 +41,24 @@ export async function saveScheduledTask({
     }),
   });
 
-  const payload = await response
-    .json()
-    .catch(() => ({ message: "Failed to parse server response." }));
+  let payload;
+
+  try {
+    payload = await response.json();
+  } catch {
+    const text = await response.text().catch(() => "");
+    const looksLikeHtml =
+      text.includes("<!doctype html") ||
+      text.includes("<html") ||
+      text.includes("</html>");
+
+    payload = {
+      message: looksLikeHtml
+        ? "The app received HTML instead of the scheduling API response. On Railway, make sure the web service is serving /api/tasks/scheduled-write."
+        : "Failed to parse server response.",
+      rawResponsePreview: text.slice(0, 200),
+    };
+  }
 
   return {
     ok: response.ok,
