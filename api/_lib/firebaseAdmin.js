@@ -102,7 +102,38 @@ function loadServiceAccountFromDiscreteEnv() {
   };
 }
 
+function loadServiceAccountFromFile(configuredPath) {
+  if (!configuredPath) {
+    return null;
+  }
+
+  try {
+    const raw = fs.readFileSync(configuredPath, "utf8");
+    return parseServiceAccountJson(raw, configuredPath);
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return null;
+    }
+
+    throw new AdminConfigurationError(
+      `Failed to load Firebase Admin credentials from ${configuredPath}.`,
+      error
+    );
+  }
+}
+
 function loadServiceAccount() {
+  const bundledServiceAccountPath = path.join(
+    __dirname,
+    "..",
+    "..",
+    "service-account.json"
+  );
+  const bundledAccount = loadServiceAccountFromFile(bundledServiceAccountPath);
+  if (bundledAccount) {
+    return bundledAccount;
+  }
+
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
   if (serviceAccountJson) {
     try {
@@ -137,34 +168,19 @@ function loadServiceAccount() {
     process.env.FIREBASE_PRIVATE_KEY
   ) {
     console.warn(
-      "Ignoring incomplete FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY values and falling back to file-based credentials."
+      "Ignoring incomplete FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY values and falling back to other credential sources."
     );
   }
 
-  const configuredPath =
-    process.env.GOOGLE_APPLICATION_CREDENTIALS ||
-    path.join(__dirname, "..", "..", "service-account.json");
-
-  try {
-    const raw = fs.readFileSync(configuredPath, "utf8");
-    return parseServiceAccountJson(raw, configuredPath);
-  } catch (error) {
-    if (error instanceof AdminConfigurationError) {
-      throw error;
-    }
-
-    if (error?.code === "ENOENT") {
-      throw new AdminConfigurationError(
-        "Firebase Admin credentials are missing. Set FIREBASE_SERVICE_ACCOUNT_JSON or the FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY variables before using the scheduling API.",
-        error
-      );
-    }
-
-    throw new AdminConfigurationError(
-      `Failed to load Firebase Admin credentials from ${configuredPath}.`,
-      error
-    );
+  const configuredPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  const configuredAccount = loadServiceAccountFromFile(configuredPath);
+  if (configuredAccount) {
+    return configuredAccount;
   }
+
+  throw new AdminConfigurationError(
+    "Firebase Admin credentials are missing. Add service-account.json to the deployed app or set FIREBASE_SERVICE_ACCOUNT_JSON, FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY, or GOOGLE_APPLICATION_CREDENTIALS."
+  );
 }
 
 export function getAdminApp() {
