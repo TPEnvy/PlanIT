@@ -1,4 +1,9 @@
-import { admin, getAdminDb, verifyBearerToken } from "../_lib/firebaseAdmin.js";
+import {
+  admin,
+  AdminConfigurationError,
+  getAdminDb,
+  verifyBearerToken,
+} from "../_lib/firebaseAdmin.js";
 import normalizeTitle from "../../src/utils/normalizeTitle.js";
 import {
   buildLocalDateTime,
@@ -8,8 +13,6 @@ import {
   toLocalTimeInput,
   validateScheduledSlot,
 } from "../../src/utils/taskHelpers.js";
-
-const db = getAdminDb();
 
 class HttpError extends Error {
   constructor(status, code, message, extra = {}) {
@@ -284,6 +287,7 @@ export default async function handler(req, res) {
 
   try {
     const decodedToken = await verifyBearerToken(req);
+    const db = getAdminDb();
     const body = parseBody(req);
     const {
       taskId = null,
@@ -452,6 +456,13 @@ export default async function handler(req, res) {
       task: result,
     });
   } catch (error) {
+    if (error instanceof AdminConfigurationError) {
+      return res.status(500).json({
+        code: "SERVER_MISCONFIGURED",
+        message: error.message,
+      });
+    }
+
     if (
       error?.message === "Missing bearer token." ||
       error?.code?.startsWith?.("auth/")
