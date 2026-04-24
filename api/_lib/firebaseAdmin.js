@@ -18,9 +18,21 @@ class AdminConfigurationError extends Error {
   }
 }
 
+function stripWrappingQuotes(value = "") {
+  const text = String(value);
+  if (
+    (text.startsWith('"') && text.endsWith('"')) ||
+    (text.startsWith("'") && text.endsWith("'"))
+  ) {
+    return text.slice(1, -1);
+  }
+
+  return text;
+}
+
 function parseServiceAccountJson(raw, sourceLabel) {
   try {
-    return JSON.parse(raw);
+    return JSON.parse(stripWrappingQuotes(raw));
   } catch (error) {
     throw new AdminConfigurationError(
       `Failed to parse Firebase Admin credentials from ${sourceLabel}.`,
@@ -47,7 +59,7 @@ function loadServiceAccountFromDiscreteEnv() {
   return {
     projectId,
     clientEmail,
-    privateKey: privateKey.replace(/\\n/g, "\n"),
+    privateKey: stripWrappingQuotes(privateKey).replace(/\\n/g, "\n"),
   };
 }
 
@@ -93,9 +105,23 @@ function loadServiceAccount() {
 
 export function getAdminApp() {
   if (!admin.apps.length) {
-    admin.initializeApp({
-      credential: admin.credential.cert(loadServiceAccount()),
-    });
+    try {
+      admin.initializeApp({
+        credential: admin.credential.cert(loadServiceAccount()),
+      });
+    } catch (error) {
+      if (error instanceof AdminConfigurationError) {
+        throw error;
+      }
+
+      const credentialMessage =
+        error?.errorInfo?.message || error?.message || "Unknown credential error.";
+
+      throw new AdminConfigurationError(
+        `Firebase Admin credentials are invalid. ${credentialMessage}`,
+        error
+      );
+    }
   }
 
   return admin.app();
