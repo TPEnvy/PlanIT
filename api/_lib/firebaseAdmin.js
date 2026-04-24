@@ -30,9 +30,50 @@ function stripWrappingQuotes(value = "") {
   return text;
 }
 
+function normalizeServiceAccount(candidate) {
+  if (!candidate) {
+    return null;
+  }
+
+  if (typeof candidate === "string") {
+    return null;
+  }
+
+  if (Array.isArray(candidate) || typeof candidate !== "object") {
+    return null;
+  }
+
+  const wrappedCandidate =
+    candidate.serviceAccount ||
+    candidate.firebase ||
+    candidate.credentials ||
+    candidate.credential ||
+    candidate.value ||
+    candidate.data;
+
+  if (wrappedCandidate && wrappedCandidate !== candidate) {
+    return normalizeServiceAccount(wrappedCandidate);
+  }
+
+  const projectId = candidate.projectId || candidate.project_id;
+  const clientEmail = candidate.clientEmail || candidate.client_email;
+  const privateKey = candidate.privateKey || candidate.private_key;
+
+  if (!projectId || !clientEmail || !privateKey) {
+    return null;
+  }
+
+  return {
+    projectId: String(projectId).trim(),
+    clientEmail: String(clientEmail).trim(),
+    privateKey: stripWrappingQuotes(privateKey).replace(/\\n/g, "\n"),
+  };
+}
+
 function parseServiceAccountJson(raw, sourceLabel) {
   try {
-    return JSON.parse(stripWrappingQuotes(raw));
+    const parsed = JSON.parse(stripWrappingQuotes(raw));
+    return normalizeServiceAccount(parsed) || parsed;
   } catch (error) {
     throw new AdminConfigurationError(
       `Failed to parse Firebase Admin credentials from ${sourceLabel}.`,
@@ -51,9 +92,7 @@ function loadServiceAccountFromDiscreteEnv() {
   }
 
   if (!projectId || !clientEmail || !privateKey) {
-    throw new AdminConfigurationError(
-      "Firebase Admin credentials are incomplete. Set FIREBASE_SERVICE_ACCOUNT_JSON or all of FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY."
-    );
+    return null;
   }
 
   return {
@@ -66,15 +105,40 @@ function loadServiceAccountFromDiscreteEnv() {
 function loadServiceAccount() {
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
   if (serviceAccountJson) {
-    return parseServiceAccountJson(
-      serviceAccountJson,
-      "FIREBASE_SERVICE_ACCOUNT_JSON"
-    );
+    try {
+      const parsed = parseServiceAccountJson(
+        serviceAccountJson,
+        "FIREBASE_SERVICE_ACCOUNT_JSON"
+      );
+      const normalized = normalizeServiceAccount(parsed);
+
+      if (normalized) {
+        return normalized;
+      }
+
+      console.warn(
+        "Ignoring FIREBASE_SERVICE_ACCOUNT_JSON because it does not look like a Firebase service account object. Falling back to other credential sources."
+      );
+    } catch (error) {
+      console.warn(
+        `Ignoring FIREBASE_SERVICE_ACCOUNT_JSON: ${error.message} Falling back to other credential sources.`
+      );
+    }
   }
 
   const discreteEnvAccount = loadServiceAccountFromDiscreteEnv();
   if (discreteEnvAccount) {
     return discreteEnvAccount;
+  }
+
+  if (
+    process.env.FIREBASE_PROJECT_ID ||
+    process.env.FIREBASE_CLIENT_EMAIL ||
+    process.env.FIREBASE_PRIVATE_KEY
+  ) {
+    console.warn(
+      "Ignoring incomplete FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY values and falling back to file-based credentials."
+    );
   }
 
   const configuredPath =
