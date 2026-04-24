@@ -464,6 +464,18 @@ export default async function handler(req, res) {
     }
 
     if (
+      error?.code === 16 ||
+      error?.details?.includes?.("UNAUTHENTICATED") ||
+      error?.message?.includes?.("UNAUTHENTICATED")
+    ) {
+      return res.status(500).json({
+        code: "SERVER_MISCONFIGURED",
+        message:
+          "Firebase Admin credentials were accepted locally but rejected by Firestore. Replace service-account.json or the FIREBASE_* credentials with a fresh service account key from the correct Firebase project.",
+      });
+    }
+
+    if (
       error?.message === "Missing bearer token." ||
       error?.code?.startsWith?.("auth/")
     ) {
