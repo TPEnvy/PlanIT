@@ -196,16 +196,28 @@ export async function getPreventNewTasksBlock(userId) {
 
     if (snap.empty) return null;
 
-    const activeBlockDoc = snap.docs.find((patternDoc) =>
-      shouldPreventNewTasks(patternDoc.data())
-    );
+    for (const patternDoc of snap.docs) {
+      const storedPattern = patternDoc.data() || {};
+      const normalizedTitle =
+        storedPattern.normalizedTitle || patternDoc.id || "";
+      const refreshedPattern =
+        normalizedTitle
+          ? await recomputeAndSavePatternStats(userId, normalizedTitle, {
+              propagate: false,
+            })
+          : null;
+      const activePattern = refreshedPattern || storedPattern;
 
-    if (!activeBlockDoc) return null;
+      if (shouldPreventNewTasks(activePattern)) {
+        return {
+          id: patternDoc.id,
+          ...storedPattern,
+          ...activePattern,
+        };
+      }
+    }
 
-    return {
-      id: activeBlockDoc.id,
-      ...activeBlockDoc.data(),
-    };
+    return null;
   } catch (error) {
     console.error("getPreventNewTasksBlock error:", error);
     return null;
