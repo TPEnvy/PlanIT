@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   GoogleAuthProvider,
+  signOut,
   signInWithPopup,
   signInWithRedirect,
 } from "firebase/auth";
@@ -42,7 +43,10 @@ export default function Signup() {
 
     try {
       await signup(trimmedEmail, password);
-      navigate("/check-email");
+      if (auth) {
+        await signOut(auth);
+      }
+      navigate("/check-email", { state: { email: trimmedEmail } });
     } catch (err) {
       console.error("Signup error:", err);
       const code = err.code || "";

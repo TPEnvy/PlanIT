@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   GoogleAuthProvider,
   sendPasswordResetEmail,
+  signOut,
   signInWithPopup,
   signInWithRedirect,
 } from "firebase/auth";
@@ -37,8 +38,12 @@ export default function Login() {
       const user = userCredential.user;
 
       if (!user.emailVerified) {
-        setError("Please verify your email before logging in.");
-        navigate("/check-email");
+        if (auth) {
+          await signOut(auth);
+        }
+        navigate("/check-email", {
+          state: { email: user.email || email.trim() },
+        });
         return;
       }
 
@@ -46,9 +51,9 @@ export default function Login() {
     } catch (err) {
       console.error("Login error:", err);
       setError("Invalid email or password.");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handlePasswordReset = async () => {
