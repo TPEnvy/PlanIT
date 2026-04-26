@@ -12,6 +12,7 @@ import CreateTask from "./pages/CreateTask";
 import TaskDetail from "./pages/TaskDetail";
 import EditTask from "./pages/EditTask";
 import SplitTask from "./pages/SplitTask";   // ✅ NEW
+import Tutorial from "./pages/Tutorial";
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/login" element={<Login />} />
         <Route path="/check-email" element={<CheckEmail />} />
+        <Route path="/tutorial" element={<Tutorial />} />
 
         {/* Protected */}
         <Route

@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">PlanIT dashboard overview</title>
+  <desc id="desc">A visual guide showing the PlanIT dashboard with task totals, completion rate, weekly bars, and weekly comparison.</desc>
+  <defs>
+    <linearGradient id="page" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#ecfdf5"/>
+      <stop offset="1" stop-color="#10b981"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#064e3b" flood-opacity="0.16"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="760" fill="url(#page)"/>
+  <rect x="0" y="0" width="1200" height="70" fill="#ffffff"/>
+  <rect x="84" y="19" width="34" height="34" rx="10" fill="#059669"/>
+  <text x="101" y="42" fill="#ffffff" font-size="20" font-weight="700" text-anchor="middle" font-family="Arial, sans-serif">P</text>
+  <text x="130" y="41" fill="#065f46" font-size="22" font-weight="700" font-family="Arial, sans-serif">PlanIT</text>
+  <text x="720" y="41" fill="#047857" font-size="15" font-family="Arial, sans-serif">Dashboard</text>
+  <text x="810" y="41" fill="#334155" font-size="15" font-family="Arial, sans-serif">Tasks</text>
+  <text x="870" y="41" fill="#334155" font-size="15" font-family="Arial, sans-serif">Tutorial</text>
+  <rect x="1014" y="20" width="96" height="32" rx="16" fill="#059669"/>
+  <text x="1062" y="41" fill="#ffffff" font-size="13" font-weight="700" text-anchor="middle" font-family="Arial, sans-serif">Logout</text>
+
+  <text x="90" y="126" fill="#065f46" font-size="36" font-weight="800" font-family="Arial, sans-serif">Dashboard</text>
+  <text x="90" y="154" fill="#475569" font-size="16" font-family="Arial, sans-serif">Overview of your tasks, weekly results, and performance trends.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="90" y="188" width="310" height="122" rx="16" fill="#ffffff"/>
+    <rect x="445" y="188" width="310" height="122" rx="16" fill="#ffffff"/>
+    <rect x="800" y="188" width="310" height="122" rx="16" fill="#ffffff"/>
+  </g>
+  <text x="120" y="227" fill="#059669" font-size="13" font-weight="700" letter-spacing="1" font-family="Arial, sans-serif">TOTAL TASKS</text>
+  <text x="120" y="268" fill="#1f2937" font-size="42" font-weight="800" font-family="Arial, sans-serif">18</text>
+  <text x="120" y="291" fill="#64748b" font-size="14" font-family="Arial, sans-serif">All tasks you have created.</text>
+  <text x="475" y="227" fill="#059669" font-size="13" font-weight="700" letter-spacing="1" font-family="Arial, sans-serif">COMPLETED TASKS</text>
+  <text x="475" y="268" fill="#1f2937" font-size="42" font-weight="800" font-family="Arial, sans-serif">12</text>
+  <text x="475" y="291" fill="#64748b" font-size="14" font-family="Arial, sans-serif">Tasks marked as completed.</text>
+  <text x="830" y="227" fill="#059669" font-size="13" font-weight="700" letter-spacing="1" font-family="Arial, sans-serif">COMPLETION RATE</text>
+  <text x="830" y="268" fill="#1f2937" font-size="42" font-weight="800" font-family="Arial, sans-serif">67%</text>
+  <text x="830" y="291" fill="#64748b" font-size="14" font-family="Arial, sans-serif">Completed vs total tasks.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="90" y="348" width="1020" height="330" rx="18" fill="#ffffff"/>
+  </g>
+  <text x="126" y="396" fill="#065f46" font-size="22" font-weight="800" font-family="Arial, sans-serif">Weekly Productivity</text>
+  <text x="126" y="423" fill="#64748b" font-size="14" font-family="Arial, sans-serif">Monday to Sunday daily completed and missed task activity.</text>
+  <rect x="790" y="378" width="110" height="32" rx="10" fill="#ecfdf5" stroke="#a7f3d0"/>
+  <text x="845" y="399" fill="#047857" font-size="13" font-weight="700" text-anchor="middle" font-family="Arial, sans-serif">Previous</text>
+  <rect x="916" y="378" width="96" height="32" rx="10" fill="#ffffff" stroke="#a7f3d0"/>
+  <text x="964" y="399" fill="#047857" font-size="13" font-weight="700" text-anchor="middle" font-family="Arial, sans-serif">Current</text>
+  <rect x="1028" y="378" width="62" height="32" rx="10" fill="#ecfdf5" stroke="#a7f3d0"/>
+  <text x="1059" y="399" fill="#047857" font-size="13" font-weight="700" text-anchor="middle" font-family="Arial, sans-serif">Next</text>
+
+  <text x="126" y="460" fill="#1f2937" font-size="16" font-weight="700" font-family="Arial, sans-serif">Selected week: Apr 20 - 26</text>
+  <rect x="322" y="444" width="92" height="28" rx="14" fill="#d1fae5"/>
+  <text x="368" y="463" fill="#065f46" font-size="12" font-weight="700" text-anchor="middle" font-family="Arial, sans-serif">Good week</text>
+
+  <line x1="126" y1="610" x2="720" y2="610" stroke="#e5e7eb" stroke-width="2"/>
+  <g>
+    <rect x="153" y="538" width="18" height="72" rx="8" fill="#10b981"/>
+    <rect x="178" y="584" width="18" height="26" rx="8" fill="#fb7185"/>
+    <rect x="238" y="498" width="18" height="112" rx="8" fill="#10b981"/>
+    <rect x="263" y="566" width="18" height="44" rx="8" fill="#fb7185"/>
+    <rect x="323" y="462" width="18" height="148" rx="8" fill="#10b981"/>
+    <rect x="348" y="592" width="18" height="18" rx="8" fill="#fecdd3"/>
+    <rect x="408" y="518" width="18" height="92" rx="8" fill="#10b981"/>
+    <rect x="433" y="575" width="18" height="35" rx="8" fill="#fb7185"/>
+    <rect x="493" y="486" width="18" height="124" rx="8" fill="#10b981"/>
+    <rect x="518" y="592" width="18" height="18" rx="8" fill="#fecdd3"/>
+    <rect x="578" y="553" width="18" height="57" rx="8" fill="#10b981"/>
+    <rect x="603" y="592" width="18" height="18" rx="8" fill="#fecdd3"/>
+    <rect x="663" y="532" width="18" height="78" rx="8" fill="#10b981"/>
+    <rect x="688" y="576" width="18" height="34" rx="8" fill="#fb7185"/>
+  </g>
+  <text x="166" y="638" fill="#475569" font-size="13" font-weight="700" text-anchor="middle" font-family="Arial, sans-serif">Mon</text>
+  <text x="251" y="638" fill="#475569" font-size="13" font-weight="700" text-anchor="middle" font-family="Arial, sans-serif">Tue</text>
+  <text x="336" y="638" fill="#047857" font-size="13" font-weight="800" text-anchor="middle" font-family="Arial, sans-serif">Wed</text>
+  <text x="421" y="638" fill="#475569" font-size="13" font-weight="700" text-anchor="middle" font-family="Arial, sans-serif">Thu</text>
+  <text x="506" y="638" fill="#475569" font-size="13" font-weight="700" text-anchor="middle" font-family="Arial, sans-serif">Fri</text>
+  <text x="591" y="638" fill="#475569" font-size="13" font-weight="700" text-anchor="middle" font-family="Arial, sans-serif">Sat</text>
+  <text x="676" y="638" fill="#475569" font-size="13" font-weight="700" text-anchor="middle" font-family="Arial, sans-serif">Sun</text>
+
+  <circle cx="910" cy="535" r="78" fill="none" stroke="#ef4444" stroke-width="32"/>
+  <path d="M910 457 A78 78 0 1 1 840 570" fill="none" stroke="#10b981" stroke-width="32" stroke-linecap="round"/>
+  <circle cx="910" cy="535" r="48" fill="#ffffff"/>
+  <text x="910" y="526" fill="#64748b" font-size="13" text-anchor="middle" font-family="Arial, sans-serif">Total</text>
+  <text x="910" y="558" fill="#111827" font-size="32" font-weight="800" text-anchor="middle" font-family="Arial, sans-serif">16</text>
+  <rect x="800" y="636" width="210" height="34" rx="12" fill="#ecfdf5" stroke="#a7f3d0"/>
+  <circle cx="824" cy="653" r="6" fill="#10b981"/>
+  <text x="844" y="658" fill="#334155" font-size="14" font-family="Arial, sans-serif">Completed</text>
+  <text x="982" y="658" fill="#065f46" font-size="16" font-weight="800" text-anchor="end" font-family="Arial, sans-serif">12</text>
+  <rect x="800" y="678" width="210" height="34" rx="12" fill="#fff1f2" stroke="#fecdd3"/>
+  <circle cx="824" cy="695" r="6" fill="#fb7185"/>
+  <text x="844" y="700" fill="#334155" font-size="14" font-family="Arial, sans-serif">Missed</text>
+  <text x="982" y="700" fill="#be123c" font-size="16" font-weight="800" text-anchor="end" font-family="Arial, sans-serif">4</text>
+</svg>

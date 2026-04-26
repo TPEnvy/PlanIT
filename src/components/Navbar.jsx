@@ -156,11 +156,19 @@ export default function Navbar() {
         </Link>
 
         <div className="hidden items-center gap-4 text-sm sm:flex">
-          <Link to="/dashboard" className="text-xs hover:text-emerald-600">
-            Dashboard
-          </Link>
-          <Link to="/tasks" className="text-xs hover:text-emerald-600">
-            Tasks
+          {user && (
+            <>
+              <Link to="/dashboard" className="text-xs hover:text-emerald-600">
+                Dashboard
+              </Link>
+              <Link to="/tasks" className="text-xs hover:text-emerald-600">
+                Tasks
+              </Link>
+            </>
+          )}
+
+          <Link to="/tutorial" className="text-xs hover:text-emerald-600">
+            Tutorial
           </Link>
 
           {user && <NotificationBell />}
@@ -179,6 +187,20 @@ export default function Navbar() {
             >
               Logout
             </button>
+          )}
+
+          {!user && (
+            <>
+              <Link to="/login" className="text-xs hover:text-emerald-600">
+                Login
+              </Link>
+              <Link
+                to="/signup"
+                className="rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700"
+              >
+                Sign Up
+              </Link>
+            </>
           )}
         </div>
 
@@ -204,20 +226,32 @@ export default function Navbar() {
             </div>
           )}
 
-          <Link
-            to="/dashboard"
-            onClick={() => setMobileOpen(false)}
-            className="block rounded-xl px-3 py-2 text-emerald-800 transition hover:bg-emerald-50"
-          >
-            Dashboard
-          </Link>
+          {user && (
+            <>
+              <Link
+                to="/dashboard"
+                onClick={() => setMobileOpen(false)}
+                className="block rounded-xl px-3 py-2 text-emerald-800 transition hover:bg-emerald-50"
+              >
+                Dashboard
+              </Link>
+
+              <Link
+                to="/tasks"
+                onClick={() => setMobileOpen(false)}
+                className="block rounded-xl px-3 py-2 text-emerald-800 transition hover:bg-emerald-50"
+              >
+                Tasks
+              </Link>
+            </>
+          )}
 
           <Link
-            to="/tasks"
+            to="/tutorial"
             onClick={() => setMobileOpen(false)}
             className="block rounded-xl px-3 py-2 text-emerald-800 transition hover:bg-emerald-50"
           >
-            Tasks
+            Tutorial
           </Link>
 
           {user && (
@@ -228,6 +262,25 @@ export default function Navbar() {
             >
               Logout
             </button>
+          )}
+
+          {!user && (
+            <>
+              <Link
+                to="/login"
+                onClick={() => setMobileOpen(false)}
+                className="block rounded-xl px-3 py-2 text-emerald-800 transition hover:bg-emerald-50"
+              >
+                Login
+              </Link>
+              <Link
+                to="/signup"
+                onClick={() => setMobileOpen(false)}
+                className="block rounded-xl bg-emerald-600 px-3 py-2 font-semibold text-white transition hover:bg-emerald-700"
+              >
+                Sign Up
+              </Link>
+            </>
           )}
         </div>
       )}

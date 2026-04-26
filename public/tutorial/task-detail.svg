@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">PlanIT task detail page</title>
+  <desc id="desc">A visual guide showing the task detail page with priority score, schedule details, pattern learning, and action buttons.</desc>
+  <defs>
+    <linearGradient id="page" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#ecfdf5"/>
+      <stop offset="1" stop-color="#10b981"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#064e3b" flood-opacity="0.16"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="760" fill="url(#page)"/>
+  <rect width="1200" height="70" fill="#ffffff"/>
+  <rect x="84" y="19" width="34" height="34" rx="10" fill="#059669"/>
+  <text x="101" y="42" fill="#ffffff" font-size="20" font-weight="700" text-anchor="middle" font-family="Arial, sans-serif">P</text>
+  <text x="130" y="41" fill="#065f46" font-size="22" font-weight="700" font-family="Arial, sans-serif">PlanIT</text>
+
+  <text x="120" y="126" fill="#047857" font-size="15" font-family="Arial, sans-serif">Back to tasks</text>
+  <g filter="url(#shadow)">
+    <rect x="120" y="154" width="960" height="552" rx="22" fill="#ffffff"/>
+  </g>
+  <text x="164" y="212" fill="#065f46" font-size="30" font-weight="800" font-family="Arial, sans-serif">Review research chapter</text>
+  <rect x="520" y="187" width="92" height="30" rx="15" fill="#f1f5f9"/>
+  <text x="566" y="207" fill="#334155" font-size="12" font-weight="800" text-anchor="middle" font-family="Arial, sans-serif">PENDING</text>
+  <text x="164" y="244" fill="#64748b" font-size="15" font-family="Arial, sans-serif">Review scheduling, focus, split, and learning details for this task.</text>
+  <text x="936" y="194" fill="#64748b" font-size="13" text-anchor="middle" font-family="Arial, sans-serif">Priority score</text>
+  <text x="936" y="232" fill="#065f46" font-size="42" font-weight="800" text-anchor="middle" font-family="Arial, sans-serif">94</text>
+  <text x="936" y="258" fill="#64748b" font-size="12" text-anchor="middle" font-family="Arial, sans-serif">W-EDF applied boost</text>
+
+  <rect x="164" y="292" width="284" height="146" rx="16" fill="#ecfdf5" stroke="#a7f3d0"/>
+  <text x="190" y="328" fill="#065f46" font-size="17" font-weight="800" font-family="Arial, sans-serif">Schedule</text>
+  <text x="190" y="360" fill="#334155" font-size="13" font-family="Arial, sans-serif">Mode: Scheduled</text>
+  <text x="190" y="384" fill="#334155" font-size="13" font-family="Arial, sans-serif">Start: Apr 28, 9:00 AM</text>
+  <text x="190" y="408" fill="#334155" font-size="13" font-family="Arial, sans-serif">End: Apr 28, 11:30 AM</text>
+
+  <rect x="478" y="292" width="284" height="146" rx="16" fill="#ecfdf5" stroke="#a7f3d0"/>
+  <text x="504" y="328" fill="#065f46" font-size="17" font-weight="800" font-family="Arial, sans-serif">Task settings</text>
+  <text x="504" y="360" fill="#334155" font-size="13" font-family="Arial, sans-serif">Urgency: urgent</text>
+  <text x="504" y="384" fill="#334155" font-size="13" font-family="Arial, sans-serif">Importance: important</text>
+  <text x="504" y="408" fill="#334155" font-size="13" font-family="Arial, sans-serif">Difficulty: medium</text>
+
+  <rect x="792" y="292" width="244" height="146" rx="16" fill="#ecfdf5" stroke="#a7f3d0"/>
+  <text x="818" y="328" fill="#065f46" font-size="17" font-weight="800" font-family="Arial, sans-serif">Activity</text>
+  <text x="818" y="360" fill="#334155" font-size="13" font-family="Arial, sans-serif">Completed: 0</text>
+  <text x="818" y="384" fill="#334155" font-size="13" font-family="Arial, sans-serif">Missed: 0</text>
+  <text x="818" y="408" fill="#334155" font-size="13" font-family="Arial, sans-serif">Actual minutes: N/A</text>
+
+  <rect x="164" y="474" width="420" height="132" rx="16" fill="#ffffff" stroke="#d1fae5"/>
+  <text x="190" y="510" fill="#065f46" font-size="17" font-weight="800" font-family="Arial, sans-serif">Same-pattern totals</text>
+  <rect x="190" y="530" width="105" height="50" rx="12" fill="#ecfdf5"/>
+  <text x="242" y="550" fill="#64748b" font-size="12" text-anchor="middle" font-family="Arial, sans-serif">Completed</text>
+  <text x="242" y="573" fill="#065f46" font-size="22" font-weight="800" text-anchor="middle" font-family="Arial, sans-serif">6</text>
+  <rect x="310" y="530" width="105" height="50" rx="12" fill="#fef3c7"/>
+  <text x="362" y="550" fill="#64748b" font-size="12" text-anchor="middle" font-family="Arial, sans-serif">Missed</text>
+  <text x="362" y="573" fill="#92400e" font-size="22" font-weight="800" text-anchor="middle" font-family="Arial, sans-serif">2</text>
+  <rect x="430" y="530" width="105" height="50" rx="12" fill="#dbeafe"/>
+  <text x="482" y="550" fill="#64748b" font-size="12" text-anchor="middle" font-family="Arial, sans-serif">Docs</text>
+  <text x="482" y="573" fill="#1d4ed8" font-size="22" font-weight="800" text-anchor="middle" font-family="Arial, sans-serif">8</text>
+
+  <rect x="616" y="474" width="420" height="132" rx="16" fill="#ffffff" stroke="#d1fae5"/>
+  <text x="642" y="510" fill="#065f46" font-size="17" font-weight="800" font-family="Arial, sans-serif">Pattern learning</text>
+  <text x="642" y="540" fill="#334155" font-size="13" font-family="Arial, sans-serif">Completion rate: 75%</text>
+  <text x="642" y="564" fill="#334155" font-size="13" font-family="Arial, sans-serif">Pattern confidence: 82%</text>
+  <text x="642" y="588" fill="#334155" font-size="13" font-family="Arial, sans-serif">Suggest split: No</text>
+
+  <rect x="164" y="638" width="130" height="40" rx="12" fill="#059669"/>
+  <text x="229" y="663" fill="#ffffff" font-size="13" font-weight="800" text-anchor="middle" font-family="Arial, sans-serif">Mark Completed</text>
+  <rect x="308" y="638" width="106" height="40" rx="12" fill="#f59e0b"/>
+  <text x="361" y="663" fill="#ffffff" font-size="13" font-weight="800" text-anchor="middle" font-family="Arial, sans-serif">Mark Missed</text>
+  <rect x="428" y="638" width="72" height="40" rx="12" fill="#2563eb"/>
+  <text x="464" y="663" fill="#ffffff" font-size="13" font-weight="800" text-anchor="middle" font-family="Arial, sans-serif">Edit</text>
+  <rect x="514" y="638" width="92" height="40" rx="12" fill="#d97706"/>
+  <text x="560" y="663" fill="#ffffff" font-size="13" font-weight="800" text-anchor="middle" font-family="Arial, sans-serif">Split Task</text>
+  <rect x="620" y="638" width="86" height="40" rx="12" fill="#ef4444"/>
+  <text x="663" y="663" fill="#ffffff" font-size="13" font-weight="800" text-anchor="middle" font-family="Arial, sans-serif">Delete</text>
+</svg>
