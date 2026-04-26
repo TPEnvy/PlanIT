@@ -67,12 +67,18 @@ function getUserLabel(user) {
 
 function SummaryCard({ label, value, note }) {
   return (
-    <div className="rounded-xl border border-emerald-100 bg-white p-4 shadow">
-      <div className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
+    <div className="min-w-0 overflow-hidden rounded-xl border border-emerald-100 bg-white p-4 shadow">
+      <div className="break-words text-xs font-semibold uppercase leading-4 tracking-wide text-emerald-600">
         {label}
       </div>
-      <div className="mt-2 text-3xl font-bold text-slate-800">{value}</div>
-      {note && <p className="mt-1 text-xs text-slate-500">{note}</p>}
+      <div className="mt-2 break-words text-2xl font-bold leading-tight text-slate-800 sm:text-3xl">
+        {value}
+      </div>
+      {note && (
+        <p className="mt-1 break-words text-xs leading-5 text-slate-500">
+          {note}
+        </p>
+      )}
     </div>
   );
 }
@@ -89,14 +95,14 @@ function ModelPill({ label, model }) {
       : "border-emerald-100 bg-emerald-50 text-emerald-700";
 
   return (
-    <div className={`rounded-lg border px-3 py-2 ${tone}`}>
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wide">
+    <div className={`min-w-0 overflow-hidden rounded-lg border px-3 py-2 ${tone}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="min-w-0 break-words text-[11px] font-semibold uppercase leading-4 tracking-wide">
           {label}
         </span>
-        <span className="text-sm font-bold">{formatScore(score)}</span>
+        <span className="shrink-0 text-sm font-bold">{formatScore(score)}</span>
       </div>
-      <div className="mt-1 text-[11px] leading-4">
+      <div className="mt-1 break-words text-[11px] leading-4">
         {model?.label || "Not stored separately"}
       </div>
     </div>
@@ -305,7 +311,7 @@ export default function AdminDashboard() {
                               type="button"
                               onClick={() => setSelectedUid(entry.uid)}
                               className={
-                                "w-full rounded-xl border p-3 text-left transition " +
+                                "min-w-0 w-full overflow-hidden rounded-xl border p-3 text-left transition " +
                                 (isSelected
                                   ? "border-emerald-400 bg-emerald-50 shadow"
                                   : "border-gray-100 bg-white hover:border-emerald-200 hover:bg-emerald-50/60")
@@ -321,7 +327,7 @@ export default function AdminDashboard() {
                                   </div>
                                 </div>
                                 <span
-                                  className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold ${trendClass}`}
+                                  className={`max-w-[120px] shrink-0 rounded-lg border px-2 py-1 text-center text-[10px] font-semibold leading-3 ${trendClass}`}
                                 >
                                   {entry.improvement.label}
                                 </span>
@@ -329,19 +335,19 @@ export default function AdminDashboard() {
                               <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px]">
                                 <div className="rounded-lg bg-slate-50 p-2">
                                   <div className="font-bold">{entry.counts.total}</div>
-                                  <div className="text-slate-500">Tasks</div>
+                                  <div className="break-words text-slate-500">Tasks</div>
                                 </div>
                                 <div className="rounded-lg bg-emerald-50 p-2">
                                   <div className="font-bold text-emerald-800">
                                     {entry.patternSummary?.patternCount || 0}
                                   </div>
-                                  <div className="text-slate-500">Patterns</div>
+                                  <div className="break-words text-slate-500">Patterns</div>
                                 </div>
                                 <div className="rounded-lg bg-red-50 p-2">
                                   <div className="font-bold text-red-700">
                                     {entry.counts.missed}
                                   </div>
-                                  <div className="text-slate-500">Missed</div>
+                                  <div className="break-words text-slate-500">Missed</div>
                                 </div>
                               </div>
                             </button>
@@ -374,15 +380,15 @@ export default function AdminDashboard() {
                           </div>
 
                           <div
-                            className={`rounded-xl border px-4 py-3 text-sm ${
+                            className={`min-w-0 rounded-xl border px-4 py-3 text-sm ${
                               trendStyles[selectedUser.improvement.status] ||
                               trendStyles.not_enough_data
                             }`}
                           >
-                            <div className="font-bold">
+                            <div className="break-words font-bold">
                               {selectedUser.improvement.label}
                             </div>
-                            <div className="mt-1 text-xs">
+                            <div className="mt-1 break-words text-xs leading-5">
                               {selectedUser.improvement.message}
                             </div>
                           </div>
@@ -435,15 +441,15 @@ export default function AdminDashboard() {
                             </p>
                           </div>
 
-                          <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                            <div className="text-xs font-semibold uppercase tracking-wide">
+                          <div className="min-w-0 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 xl:max-w-xs">
+                            <div className="break-words text-xs font-semibold uppercase leading-4 tracking-wide">
                               Highest risk
                             </div>
-                            <div className="mt-1 max-w-[260px] truncate font-bold">
+                            <div className="mt-1 break-words font-bold">
                               {patternSummary.highestRiskPattern?.normalizedTitle ||
                                 "N/A"}
                             </div>
-                            <div className="mt-1 text-xs">
+                            <div className="mt-1 break-words text-xs">
                               Score:{" "}
                               {formatScore(patternSummary.highestRiskPattern?.mlRiskScore)}
                             </div>
@@ -482,32 +488,32 @@ export default function AdminDashboard() {
                             {selectedPatterns.map((pattern) => (
                               <article
                                 key={pattern.id}
-                                className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm"
+                                className="min-w-0 overflow-hidden rounded-xl border border-emerald-100 bg-white p-4 shadow-sm"
                               >
                                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                  <div className="min-w-0">
-                                    <h4 className="break-words text-base font-bold text-slate-800">
+                                  <div className="min-w-0 flex-1">
+                                    <h4 className="break-all text-base font-bold leading-6 text-slate-800">
                                       {pattern.normalizedTitle || "Untitled pattern"}
                                     </h4>
-                                    <p className="mt-1 text-xs text-slate-500">
+                                    <p className="mt-1 break-words text-xs leading-5 text-slate-500">
                                       {pattern.docCount} current docs,{" "}
                                       {pattern.historicalDocCount} historical docs
                                     </p>
                                   </div>
 
-                                  <div className="flex flex-wrap gap-2">
+                                  <div className="flex min-w-0 flex-wrap gap-2 sm:justify-end">
                                     {pattern.preventNewTasks && (
-                                      <span className="rounded-full border border-red-100 bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700">
+                                      <span className="inline-flex max-w-full items-center rounded-lg border border-red-100 bg-red-50 px-2 py-1 text-left text-[11px] font-semibold leading-4 text-red-700">
                                         Blocked
                                       </span>
                                     )}
                                     {pattern.suggestSplit && (
-                                      <span className="rounded-full border border-amber-100 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700">
+                                      <span className="inline-flex max-w-full items-center rounded-lg border border-amber-100 bg-amber-50 px-2 py-1 text-left text-[11px] font-semibold leading-4 text-amber-700">
                                         Split suggested
                                       </span>
                                     )}
                                     {pattern.recoveryUnlocked && (
-                                      <span className="rounded-full border border-emerald-100 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                                      <span className="inline-flex max-w-full items-center rounded-lg border border-emerald-100 bg-emerald-50 px-2 py-1 text-left text-[11px] font-semibold leading-4 text-emerald-700">
                                         Recovered
                                       </span>
                                     )}
@@ -549,21 +555,21 @@ export default function AdminDashboard() {
                                 </div>
 
                                 <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
-                                  <div>
+                                  <div className="min-w-0 break-words leading-5">
                                     Adaptive boost:{" "}
-                                    <span className="font-bold text-slate-800">
+                                    <span className="break-words font-bold text-slate-800">
                                       {formatBoost(pattern.adaptiveBoost)}
                                     </span>
                                   </div>
-                                  <div>
+                                  <div className="min-w-0 break-words leading-5">
                                     Pending:{" "}
-                                    <span className="font-bold text-slate-800">
+                                    <span className="break-words font-bold text-slate-800">
                                       {pattern.pendingTaskCount}
                                     </span>
                                   </div>
-                                  <div>
+                                  <div className="min-w-0 break-words leading-5">
                                     Model count:{" "}
-                                    <span className="font-bold text-slate-800">
+                                    <span className="break-words font-bold text-slate-800">
                                       {pattern.modelCount ?? "N/A"}
                                     </span>
                                   </div>
