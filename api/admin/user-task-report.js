@@ -1,4 +1,9 @@
-import { admin, getAdminDb, verifyBearerToken } from "../_lib/firebaseAdmin.js";
+import {
+  AdminConfigurationError,
+  admin,
+  getAdminDb,
+  verifyBearerToken,
+} from "../_lib/firebaseAdmin.js";
 
 const DEFAULT_USER_LIMIT = 100;
 const MAX_USER_LIMIT = 500;
@@ -465,6 +470,16 @@ export default async function handler(req, res) {
     if (error instanceof HttpError) {
       return res.status(error.status).json({
         code: error.code,
+        message: error.message,
+      });
+    }
+
+    if (
+      error instanceof AdminConfigurationError ||
+      error?.code === "ADMIN_CONFIG_ERROR"
+    ) {
+      return res.status(500).json({
+        code: "ADMIN_CONFIG_ERROR",
         message: error.message,
       });
     }
