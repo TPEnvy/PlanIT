@@ -2,13 +2,15 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import adminReportHandler from "./api/admin/user-task-report.js";
 import scheduledWriteHandler from "./api/tasks/scheduled-write.js";
 import { invokeJsonHandler } from "./api/_lib/invokeHandler.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DIST_DIR = path.join(__dirname, "dist");
-const API_ROUTE = "/api/tasks/scheduled-write";
+const SCHEDULED_WRITE_API_ROUTE = "/api/tasks/scheduled-write";
+const ADMIN_REPORT_API_ROUTE = "/api/admin/user-task-report";
 
 const CONTENT_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -98,7 +100,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (requestUrl.pathname === API_ROUTE) {
+    if (requestUrl.pathname === SCHEDULED_WRITE_API_ROUTE) {
       const body = ["POST", "PUT", "PATCH"].includes(req.method || "")
         ? await readJsonBody(req)
         : {};
@@ -106,6 +108,19 @@ const server = http.createServer(async (req, res) => {
         method: req.method,
         headers: normalizeHeaders(req.headers),
         body,
+      });
+
+      setHeaders(res, adapted.headers);
+      res.writeHead(adapted.statusCode);
+      res.end(adapted.body);
+      return;
+    }
+
+    if (requestUrl.pathname === ADMIN_REPORT_API_ROUTE) {
+      const adapted = await invokeJsonHandler(adminReportHandler, {
+        method: req.method,
+        headers: normalizeHeaders(req.headers),
+        query: Object.fromEntries(requestUrl.searchParams.entries()),
       });
 
       setHeaders(res, adapted.headers);

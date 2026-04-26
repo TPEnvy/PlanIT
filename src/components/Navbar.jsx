@@ -13,6 +13,7 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const isAdminPage = location.pathname.startsWith("/admin");
 
   useEffect(() => {
     setNotifOpen(false);
@@ -156,7 +157,13 @@ export default function Navbar() {
         </Link>
 
         <div className="hidden items-center gap-4 text-sm sm:flex">
-          {user && (
+          {isAdminPage && (
+            <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+              Admin Dashboard
+            </span>
+          )}
+
+          {user && !isAdminPage && (
             <>
               <Link to="/dashboard" className="text-xs hover:text-emerald-600">
                 Dashboard
@@ -167,9 +174,11 @@ export default function Navbar() {
             </>
           )}
 
-          <Link to="/tutorial" className="text-xs hover:text-emerald-600">
-            Tutorial
-          </Link>
+          {!isAdminPage && (
+            <Link to="/tutorial" className="text-xs hover:text-emerald-600">
+              Tutorial
+            </Link>
+          )}
 
           {user && <NotificationBell />}
 
@@ -218,7 +227,7 @@ export default function Navbar() {
           {user && (
             <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2">
               <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
-                Signed In
+                {isAdminPage ? "Admin Area" : "Signed In"}
               </div>
               <div className="mt-1 truncate text-xs text-gray-600">
                 {user.email}
@@ -226,7 +235,7 @@ export default function Navbar() {
             </div>
           )}
 
-          {user && (
+          {user && !isAdminPage && (
             <>
               <Link
                 to="/dashboard"
@@ -246,13 +255,15 @@ export default function Navbar() {
             </>
           )}
 
-          <Link
-            to="/tutorial"
-            onClick={() => setMobileOpen(false)}
-            className="block rounded-xl px-3 py-2 text-emerald-800 transition hover:bg-emerald-50"
-          >
-            Tutorial
-          </Link>
+          {!isAdminPage && (
+            <Link
+              to="/tutorial"
+              onClick={() => setMobileOpen(false)}
+              className="block rounded-xl px-3 py-2 text-emerald-800 transition hover:bg-emerald-50"
+            >
+              Tutorial
+            </Link>
+          )}
 
           {user && (
             <button

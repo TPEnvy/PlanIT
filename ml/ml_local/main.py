@@ -11,6 +11,7 @@ from firebase_admin import credentials, firestore
 from dotenv import load_dotenv
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from ml_service import evaluate_history
 
 load_dotenv()
 
@@ -41,6 +42,9 @@ class HistoricalItem(BaseModel):
     missedCount: Optional[int] = 0
     estimatedMinutes: Optional[float] = None
     actualMinutes: Optional[float] = None
+    isSplitParent: Optional[bool] = False
+    isSplitSegment: Optional[bool] = False
+    status: Optional[str] = None
 
 class PredictRequest(BaseModel):
     title: str
@@ -54,7 +58,11 @@ class PredictResponse(BaseModel):
     total_missed: int
     completion_rate: float
     overrun_ratio: float
+    risk_xgb: Optional[float] = None
+    risk_lr: Optional[float] = None
+    modelCount: Optional[int] = None
     adaptiveBoost: float
+    mlRiskScore: float
     suggestSplit: bool
     preventNewTasks: bool
     explanation: Optional[str] = None
@@ -185,6 +193,9 @@ def aggregate_tasks_for_normalized(userId: str, normalizedTitle: str) -> List[Di
             "missedCount": int(data.get("missedCount", 0) or 0),
             "estimatedMinutes": float(data.get("estimatedMinutes")) if data.get("estimatedMinutes") is not None else 0,
             "actualMinutes": float(data.get("totalActualMinutes", 0) or 0),
+            "isSplitParent": bool(data.get("isSplitParent")),
+            "isSplitSegment": bool(data.get("isSplitSegment")),
+            "status": str(data.get("status", "") or "").lower(),
         })
     return items
 
@@ -227,7 +238,7 @@ async def predict(req: PredictRequest):
         else:
             hist_items = []
 
-    pattern = compute_from_history_items(hist_items)
+    pattern = evaluate_history(hist_items)
     pattern["normalizedTitle"] = normalized
     if firestore_read_failed:
         pattern["explanation"] = f"{pattern.get('explanation', '')}; firestoreFallback=true"
@@ -245,7 +256,11 @@ async def predict(req: PredictRequest):
             "total_missed": int(pattern["total_missed"]),
             "completion_rate": float(pattern["completion_rate"]),
             "overrun_ratio": float(pattern["overrun_ratio"]),
+            "risk_xgb": float(pattern.get("risk_xgb", 0) or 0),
+            "risk_lr": float(pattern.get("risk_lr", 0) or 0),
+            "modelCount": int(pattern.get("modelCount", 0) or 0),
             "adaptiveBoost": float(pattern["adaptiveBoost"]),
+            "mlRiskScore": float(pattern.get("mlRiskScore", 0) or 0),
             "suggestSplit": bool(pattern["suggestSplit"]),
             "preventNewTasks": bool(pattern["preventNewTasks"]),
             "explanation": pattern.get("explanation", ""),
@@ -264,7 +279,11 @@ async def predict(req: PredictRequest):
         "total_missed": int(pattern["total_missed"]),
         "completion_rate": float(pattern["completion_rate"]),
         "overrun_ratio": float(pattern["overrun_ratio"]),
+        "risk_xgb": float(pattern.get("risk_xgb", 0) or 0),
+        "risk_lr": float(pattern.get("risk_lr", 0) or 0),
+        "modelCount": int(pattern.get("modelCount", 0) or 0),
         "adaptiveBoost": float(pattern["adaptiveBoost"]),
+        "mlRiskScore": float(pattern.get("mlRiskScore", 0) or 0),
         "suggestSplit": bool(pattern["suggestSplit"]),
         "preventNewTasks": bool(pattern["preventNewTasks"]),
         "explanation": pattern.get("explanation", ""),

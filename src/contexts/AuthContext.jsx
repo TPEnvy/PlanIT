@@ -36,12 +36,29 @@ export function AuthProvider({ children }) {
       return undefined;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser || null);
+    const fallbackTimer = window.setTimeout(() => {
       setLoading(false);
-    });
+    }, 8000);
 
-    return () => unsubscribe();
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (firebaseUser) => {
+        window.clearTimeout(fallbackTimer);
+        setUser(firebaseUser || null);
+        setLoading(false);
+      },
+      (error) => {
+        window.clearTimeout(fallbackTimer);
+        console.error("Firebase auth state error:", error);
+        setUser(null);
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      window.clearTimeout(fallbackTimer);
+      unsubscribe();
+    };
   }, []);
 
   // Signup with email + password + send verification

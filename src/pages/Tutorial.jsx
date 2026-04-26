@@ -101,14 +101,14 @@ export default function Tutorial() {
         <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
           <header className="mb-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
                   Tutorial and documentation
                 </p>
                 <h1 className="mt-2 text-3xl font-bold text-emerald-900 sm:text-4xl">
                   How to use PlanIT
                 </h1>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-700">
+                <p className="mt-2 max-w-2xl break-words text-sm leading-6 text-slate-700">
                   Follow this guide to move from dashboard review to task
                   creation, daily task management, completion tracking, and
                   long-task splitting.
@@ -141,7 +141,7 @@ export default function Tutorial() {
                 <h2 className="text-sm font-semibold text-emerald-800">
                   {item.title}
                 </h2>
-                <p className="mt-2 text-xs leading-5 text-slate-600">
+                <p className="mt-2 break-words text-xs leading-5 text-slate-600">
                   {item.text}
                 </p>
               </div>

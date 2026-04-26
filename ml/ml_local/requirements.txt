@@ -4,3 +4,6 @@ firebase-admin
 sendgrid
 pydantic
 python-dotenv
+numpy
+scikit-learn
+xgboost

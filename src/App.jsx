@@ -13,6 +13,7 @@ import TaskDetail from "./pages/TaskDetail";
 import EditTask from "./pages/EditTask";
 import SplitTask from "./pages/SplitTask";   // ✅ NEW
 import Tutorial from "./pages/Tutorial";
+import AdminDashboard from "./pages/AdminDashboard";
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -40,6 +41,15 @@ export default function App() {
         <Route path="/tutorial" element={<Tutorial />} />
 
         {/* Protected */}
+        <Route
+          path="/admin"
+          element={
+            <PrivateRoute>
+              <AdminDashboard />
+            </PrivateRoute>
+          }
+        />
+
         <Route
           path="/dashboard"
           element={

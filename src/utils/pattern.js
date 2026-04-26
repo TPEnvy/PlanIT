@@ -336,6 +336,18 @@ export async function recomputeAndSavePatternStats(
     );
     const adaptiveBoost = Number(prediction?.adaptiveBoost ?? 0);
     const mlRiskScore = Number(prediction?.mlRiskScore ?? 0);
+    const riskXgb =
+      prediction?.risk_xgb == null
+        ? existingPattern.risk_xgb ?? null
+        : Number(prediction.risk_xgb);
+    const riskLr =
+      prediction?.risk_lr == null
+        ? existingPattern.risk_lr ?? null
+        : Number(prediction.risk_lr);
+    const modelCount =
+      prediction?.modelCount == null
+        ? existingPattern.modelCount ?? null
+        : Number(prediction.modelCount);
 
     const historicalTotalMissed = Math.max(
       Number(existingPattern.historicalTotalMissed || 0),
@@ -384,6 +396,9 @@ export async function recomputeAndSavePatternStats(
       recoveryUnlocked,
       completion_rate: completionRate,
       overrun_ratio: overrunRatio,
+      risk_xgb: riskXgb,
+      risk_lr: riskLr,
+      modelCount,
       adaptiveBoost,
       mlRiskScore,
       suggestSplit,
