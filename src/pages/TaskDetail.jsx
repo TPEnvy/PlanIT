@@ -74,6 +74,11 @@ function formatPercent(value) {
   return `${(Number(value) * 100).toFixed(0)}%`;
 }
 
+function formatScore(value, digits = 4) {
+  if (value == null || Number.isNaN(Number(value))) return "N/A";
+  return Number(value).toFixed(digits);
+}
+
 function LabelValue({ label, value }) {
   return (
     <p>
@@ -244,6 +249,18 @@ export default function TaskDetail() {
 
     return computePriorityScore(task, patternStats);
   }, [task, patternStats]);
+  const patternDocCount = Number(
+    patternStats?.docCount ??
+      patternStats?.historicalDocCount ??
+      task?.patternDocCount ??
+      0
+  );
+  const patternConfidence =
+    patternDocCount > 0 ? Math.min(patternDocCount / 5, 1) : null;
+  const storedTaskPriority =
+    typeof task?.priorityScore === "number" ? task.priorityScore : null;
+  const rawAdaptiveBoost =
+    patternStats?.adaptiveBoost ?? task?.adaptiveBoost ?? null;
 
   const isFinalized = isResolvedTask(task);
 
@@ -505,19 +522,23 @@ export default function TaskDetail() {
                   <div className="text-right">
                     {priority ? (
                       <>
-                        <p className="text-xs text-gray-500">Priority score</p>
+                        <p className="text-xs text-gray-500">
+                          Document priority score
+                        </p>
                         <p className="text-2xl font-semibold text-emerald-800">
-                          {priority.final}
+                          {formatScore(priority.final)}
                         </p>
                         <p className="text-xs text-gray-500 mt-1">
-                          W {priority.W.toFixed(3)} | EDF{" "}
-                          {priority.EDF.toFixed(5)} | Applied boost{" "}
-                          {priority.adaptiveBoost.toFixed(3)}
+                          W {formatScore(priority.W, 3)} | EDF{" "}
+                          {formatScore(priority.EDF, 5)} | Applied boost{" "}
+                          {formatScore(priority.adaptiveBoost, 3)}
                         </p>
                       </>
                     ) : (
                       <>
-                        <p className="text-xs text-gray-500">Priority score</p>
+                        <p className="text-xs text-gray-500">
+                          Document priority score
+                        </p>
                         <p className="text-lg font-semibold text-gray-500">
                           Not ranked
                         </p>
@@ -735,6 +756,52 @@ export default function TaskDetail() {
 
                   <div className="rounded-2xl border border-emerald-100 bg-white p-4">
                     <p className="font-semibold text-emerald-800 mb-2">
+                      Priority scoring
+                    </p>
+                    <div className="space-y-1 text-xs">
+                      <LabelValue
+                        label="Document priority score"
+                        value={formatScore(priority?.final)}
+                      />
+                      <LabelValue
+                        label="Priority active"
+                        value={priority ? "Yes" : "No"}
+                      />
+                      <LabelValue
+                        label="Stored task priority"
+                        value={formatScore(storedTaskPriority)}
+                      />
+                      <LabelValue
+                        label="Base weight"
+                        value={formatScore(priority?.W, 3)}
+                      />
+                      <LabelValue
+                        label="Deadline factor"
+                        value={formatScore(priority?.EDF, 5)}
+                      />
+                      <LabelValue
+                        label="Pattern confidence"
+                        value={
+                          patternConfidence != null
+                            ? `${(patternConfidence * 100).toFixed(0)}% (${patternDocCount} doc${
+                                patternDocCount === 1 ? "" : "s"
+                              })`
+                            : "N/A"
+                        }
+                      />
+                      <LabelValue
+                        label="Raw adaptive boost"
+                        value={formatScore(rawAdaptiveBoost, 2)}
+                      />
+                      <LabelValue
+                        label="Applied boost"
+                        value={formatScore(priority?.adaptiveBoost, 2)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-emerald-100 bg-white p-4">
+                    <p className="font-semibold text-emerald-800 mb-2">
                       Pattern learning
                     </p>
                     <div className="space-y-1 text-xs">
@@ -749,30 +816,8 @@ export default function TaskDetail() {
                         }
                       />
                       <LabelValue
-                        label="Completion rate"
+                        label="Overall completion rate"
                         value={formatPercent(patternStats?.completion_rate)}
-                      />
-                      <LabelValue
-                        label="Pattern confidence"
-                        value={
-                          priority
-                            ? `${(priority.confidence * 100).toFixed(0)}%`
-                            : "N/A"
-                        }
-                      />
-                      <LabelValue
-                        label="Raw adaptive boost"
-                        value={
-                          patternStats?.adaptiveBoost != null
-                            ? Number(patternStats.adaptiveBoost).toFixed(2)
-                            : "N/A"
-                        }
-                      />
-                      <LabelValue
-                        label="Applied boost"
-                        value={
-                          priority ? priority.adaptiveBoost.toFixed(2) : "N/A"
-                        }
                       />
                       <LabelValue
                         label="ML risk score"
@@ -791,7 +836,7 @@ export default function TaskDetail() {
                         value={patternStats?.pendingTaskCount ?? "N/A"}
                       />
                       <LabelValue
-                        label="Recent completion rate"
+                        label="Recent completion rate (last 4)"
                         value={formatPercent(patternStats?.recentCompletionRate)}
                       />
                       <LabelValue

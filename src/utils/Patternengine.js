@@ -50,8 +50,13 @@ export function computePriorityScore(task = {}, patternStats = {}) {
 
   const W = 0.4 * U + 0.4 * I + 0.2 * D;
 
-  const rawBoost = patternStats?.adaptiveBoost ?? 0;
-  const docCount = patternStats?.docCount ?? 0;
+  const rawBoost = Number(patternStats?.adaptiveBoost ?? task?.adaptiveBoost ?? 0);
+  const docCount = Number(
+    patternStats?.docCount ??
+      patternStats?.historicalDocCount ??
+      task?.patternDocCount ??
+      0
+  );
 
   const confidence = Math.min(docCount / 5, 1);
   const effectiveBoost = rawBoost * confidence;
