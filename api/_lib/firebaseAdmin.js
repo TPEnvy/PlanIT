@@ -182,9 +182,19 @@ function loadServiceAccount() {
     return discreteEnvAccount;
   }
 
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    const configuredAccount = loadServiceAccountFromFile(
+      process.env.GOOGLE_APPLICATION_CREDENTIALS
+    );
+
+    if (configuredAccount) {
+      return configuredAccount;
+    }
+  }
+
   if (isRailwayRuntime()) {
     throw new AdminConfigurationError(
-      "Firebase Admin credentials are missing in Railway. Set FIREBASE_SERVICE_ACCOUNT_JSON on the PlanIT web service, or set FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY together."
+      "Firebase Admin credentials are missing in Railway. Set FIREBASE_SERVICE_ACCOUNT_JSON on the PlanIT web service, set FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY together, or set GOOGLE_APPLICATION_CREDENTIALS to an uploaded credential file."
     );
   }
 
