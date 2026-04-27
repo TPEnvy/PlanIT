@@ -70,15 +70,50 @@ function normalizeServiceAccount(candidate) {
   };
 }
 
+function parseJsonCredentialValue(raw, sourceLabel) {
+  const text = String(raw || "").trim();
+  const candidates = [text];
+  const strippedText = stripWrappingQuotes(text);
+
+  if (strippedText !== text) {
+    candidates.push(strippedText);
+  }
+
+  let lastError = null;
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      return typeof parsed === "string" ? JSON.parse(parsed) : parsed;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw new AdminConfigurationError(
+    `Failed to parse Firebase Admin credentials from ${sourceLabel}.`,
+    lastError
+  );
+}
+
 function parseServiceAccountJson(raw, sourceLabel) {
   try {
-    const parsed = JSON.parse(stripWrappingQuotes(raw));
-    return normalizeServiceAccount(parsed) || parsed;
+    const parsed = parseJsonCredentialValue(raw, sourceLabel);
+    const normalized = normalizeServiceAccount(parsed);
+
+    if (!normalized) {
+      throw new AdminConfigurationError(
+        `${sourceLabel} does not contain project_id, client_email, and private_key.`
+      );
+    }
+
+    return normalized;
   } catch (error) {
-    throw new AdminConfigurationError(
-      `Failed to parse Firebase Admin credentials from ${sourceLabel}.`,
-      error
-    );
+    if (error instanceof AdminConfigurationError) {
+      throw error;
+    }
+
+    throw error;
   }
 }
 
@@ -92,7 +127,9 @@ function loadServiceAccountFromDiscreteEnv() {
   }
 
   if (!projectId || !clientEmail || !privateKey) {
-    return null;
+    throw new AdminConfigurationError(
+      "Incomplete Firebase Admin credential variables. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY together."
+    );
   }
 
   return {
@@ -100,6 +137,15 @@ function loadServiceAccountFromDiscreteEnv() {
     clientEmail,
     privateKey: stripWrappingQuotes(privateKey).replace(/\\n/g, "\n"),
   };
+}
+
+function isRailwayRuntime() {
+  return Boolean(
+    process.env.RAILWAY_ENVIRONMENT ||
+      process.env.RAILWAY_ENVIRONMENT_ID ||
+      process.env.RAILWAY_PROJECT_ID ||
+      process.env.RAILWAY_SERVICE_ID
+  );
 }
 
 function loadServiceAccountFromFile(configuredPath) {
@@ -125,25 +171,21 @@ function loadServiceAccountFromFile(configuredPath) {
 function loadServiceAccount() {
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
   if (serviceAccountJson) {
-    try {
-      const parsed = parseServiceAccountJson(
-        serviceAccountJson,
-        "FIREBASE_SERVICE_ACCOUNT_JSON"
-      );
-      const normalized = normalizeServiceAccount(parsed);
+    return parseServiceAccountJson(
+      serviceAccountJson,
+      "FIREBASE_SERVICE_ACCOUNT_JSON"
+    );
+  }
 
-      if (normalized) {
-        return normalized;
-      }
+  const discreteEnvAccount = loadServiceAccountFromDiscreteEnv();
+  if (discreteEnvAccount) {
+    return discreteEnvAccount;
+  }
 
-      console.warn(
-        "Ignoring FIREBASE_SERVICE_ACCOUNT_JSON because it does not look like a Firebase service account object. Falling back to other credential sources."
-      );
-    } catch (error) {
-      console.warn(
-        `Ignoring FIREBASE_SERVICE_ACCOUNT_JSON: ${error.message} Falling back to other credential sources.`
-      );
-    }
+  if (isRailwayRuntime()) {
+    throw new AdminConfigurationError(
+      "Firebase Admin credentials are missing in Railway. Set FIREBASE_SERVICE_ACCOUNT_JSON on the PlanIT web service, or set FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY together."
+    );
   }
 
   const bundledServiceAccountPath = path.join(
@@ -157,21 +199,6 @@ function loadServiceAccount() {
   const configuredAccount = loadServiceAccountFromFile(configuredPath);
   if (configuredAccount) {
     return configuredAccount;
-  }
-
-  const discreteEnvAccount = loadServiceAccountFromDiscreteEnv();
-  if (discreteEnvAccount) {
-    return discreteEnvAccount;
-  }
-
-  if (
-    process.env.FIREBASE_PROJECT_ID ||
-    process.env.FIREBASE_CLIENT_EMAIL ||
-    process.env.FIREBASE_PRIVATE_KEY
-  ) {
-    console.warn(
-      "Ignoring incomplete FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY values and falling back to other credential sources."
-    );
   }
 
   throw new AdminConfigurationError(
