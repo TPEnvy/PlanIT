@@ -2,6 +2,7 @@ import {
   AdminConfigurationError,
   admin,
   getAdminDb,
+  isAdminCredentialRuntimeError,
   verifyBearerToken,
 } from "../_lib/firebaseAdmin.js";
 
@@ -476,11 +477,13 @@ export default async function handler(req, res) {
 
     if (
       error instanceof AdminConfigurationError ||
-      error?.code === "ADMIN_CONFIG_ERROR"
+      error?.code === "ADMIN_CONFIG_ERROR" ||
+      isAdminCredentialRuntimeError(error)
     ) {
       return res.status(500).json({
         code: "ADMIN_CONFIG_ERROR",
-        message: error.message,
+        message:
+          "Firebase Admin service-account credentials are invalid or revoked. Generate a new Firebase Admin SDK private key and replace FIREBASE_SERVICE_ACCOUNT_JSON in the Railway PlanIT web service variables.",
       });
     }
 

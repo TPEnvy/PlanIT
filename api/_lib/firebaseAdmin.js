@@ -224,5 +224,19 @@ export async function verifyBearerToken(req) {
   return admin.auth().verifyIdToken(idToken);
 }
 
+export function isAdminCredentialRuntimeError(error) {
+  const code = String(error?.code || error?.errorInfo?.code || "");
+  const message = String(
+    error?.message || error?.errorInfo?.message || error?.details || ""
+  );
+
+  return (
+    code === "app/invalid-credential" ||
+    message.includes("invalid_grant") ||
+    message.includes("Invalid JWT Signature") ||
+    message.includes("failed to fetch a valid Google OAuth2 access token")
+  );
+}
+
 export { admin };
 export { AdminConfigurationError };
