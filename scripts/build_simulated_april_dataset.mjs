@@ -1554,11 +1554,11 @@ const IT_ASSOCIATE_TASK_TEMPLATES = [
 const IT_ASSOCIATE_DAY_PLANS = [
   {
     date: "2026-04-16",
-    note: "A normal IT support day with ticket triage, setup work, network checks, patching, and asset updates all completed.",
+    note: "A normal IT support day, though the afternoon network checks are deferred after an urgent desk-side request.",
     outcomes: {
       "service-desk-ticket-triage": { status: "completed", actualMinutes: 46 },
       "workstation-setup-requests": { status: "completed", actualMinutes: 61 },
-      "network-connectivity-checks": { status: "completed", actualMinutes: 45 },
+      "network-connectivity-checks": { status: "missed" },
       "software-update-deployment": { status: "completed", actualMinutes: 62 },
       "it-asset-inventory-update": { status: "completed", actualMinutes: 30 },
     },
@@ -1576,13 +1576,13 @@ const IT_ASSOCIATE_DAY_PLANS = [
   },
   {
     date: "2026-04-18",
-    note: "Helpdesk and maintenance work stay predictable across the shift.",
+    note: "Helpdesk and maintenance work stay predictable, but the asset inventory update is left for the next shift.",
     outcomes: {
       "service-desk-ticket-triage": { status: "completed", actualMinutes: 45 },
       "workstation-setup-requests": { status: "completed", actualMinutes: 60 },
       "network-connectivity-checks": { status: "completed", actualMinutes: 44 },
       "software-update-deployment": { status: "completed", actualMinutes: 61 },
-      "it-asset-inventory-update": { status: "completed", actualMinutes: 29 },
+      "it-asset-inventory-update": { status: "missed" },
     },
   },
   {
@@ -1642,10 +1642,10 @@ const IT_ASSOCIATE_DAY_PLANS = [
   },
   {
     date: "2026-04-24",
-    note: "Support and endpoint maintenance continue at a stable pace.",
+    note: "Support and endpoint maintenance continue at a stable pace, with one workstation setup deferred.",
     outcomes: {
       "service-desk-ticket-triage": { status: "completed", actualMinutes: 46 },
-      "workstation-setup-requests": { status: "completed", actualMinutes: 59 },
+      "workstation-setup-requests": { status: "missed" },
       "network-connectivity-checks": { status: "completed", actualMinutes: 46 },
       "software-update-deployment": { status: "completed", actualMinutes: 60 },
       "it-asset-inventory-update": { status: "completed", actualMinutes: 30 },
@@ -1664,11 +1664,11 @@ const IT_ASSOCIATE_DAY_PLANS = [
   },
   {
     date: "2026-04-26",
-    note: "The workload remains steady, with routine support work completed without escalation.",
+    note: "The workload remains steady, but a late network check is missed after an escalation call.",
     outcomes: {
       "service-desk-ticket-triage": { status: "completed", actualMinutes: 45 },
       "workstation-setup-requests": { status: "completed", actualMinutes: 59 },
-      "network-connectivity-checks": { status: "completed", actualMinutes: 44 },
+      "network-connectivity-checks": { status: "missed" },
       "software-update-deployment": { status: "completed", actualMinutes: 60 },
       "it-asset-inventory-update": { status: "completed", actualMinutes: 29 },
     },
