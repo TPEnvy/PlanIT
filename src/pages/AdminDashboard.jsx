@@ -715,13 +715,15 @@ export default function AdminDashboard() {
                             note="Added to priority after confidence weighting."
                           />
                           <SummaryCard
-                            label="Split signals"
-                            value={selectedPatternSummary.suggestSplitCount}
+                            label="Active split signals"
+                            value={
+                              selectedPatternSummary.activeSuggestSplitCount || 0
+                            }
                             note={`${
-                              selectedPatternSummary.blockSignalTestedCount || 0
-                            } block tests, ${
                               selectedPatternSummary.preventNewTasksCount || 0
-                            } active blocks`}
+                            } active blocks, ${
+                              selectedPatternSummary.recoveredSignalCount || 0
+                            } recovered`}
                           />
                         </div>
 
@@ -753,9 +755,7 @@ export default function AdminDashboard() {
                                     )}
                                     {!pattern.preventNewTasks &&
                                       pattern.blockSignalTested && (
-                                        <PatternFlag tone="red">
-                                          Block tested
-                                        </PatternFlag>
+                                        <PatternFlag>Recovered block</PatternFlag>
                                       )}
                                     {pattern.suggestSplit && (
                                       <PatternFlag tone="amber">
@@ -765,7 +765,7 @@ export default function AdminDashboard() {
                                     {!pattern.suggestSplit &&
                                       pattern.splitSignalTested && (
                                         <PatternFlag tone="amber">
-                                          Split tested
+                                          Recovered split
                                         </PatternFlag>
                                       )}
                                     {pattern.recoveryUnlocked && (
