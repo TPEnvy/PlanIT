@@ -77,6 +77,10 @@ const DEMO_BLOCK_SPLIT_COVERAGE = {
     splitTitle: "laundry and folding",
     blockTitle: "grocery and meal planning",
   },
+  b7eoxXTj45baMZjuwHtjUuO3k3o1: {
+    splitTitle: "video editing client work",
+    blockTitle: "project management sideline",
+  },
 };
 
 function printUsage() {
