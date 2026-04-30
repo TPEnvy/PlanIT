@@ -22,17 +22,6 @@ const riskStyles = {
   unknown: "bg-gray-50 text-gray-600 border-gray-100",
 };
 const EMPTY_USERS = [];
-const DEMO_REPORT_UIDS = [
-  "4Iev3QkxQoZrpfjaYGnwxKHWnXv1",
-  "SehTYcFFmbeyz84vT7Ct1DmqB6J3",
-  "NHqgUHlBlwgXML8YlQadtQvO4xl1",
-  "6nec8OkuBQTW0vs7b6aaVlEM8HB3",
-  "oTf9ZUVQ6XQx0plx6X3G7r5YImS2",
-  "9vhEI3OTEibeEM1AZxm2fhVA1zr1",
-  "SK0v6biv6sVxWFmYYTteA5Snq583",
-  "tlzjTO1BpLWYlDk4khOYV8ZYDwW2",
-  "aE0FcUx9B9Pt0Gt8wjCH9BPf0W02",
-];
 const SEEDED_USER_TRENDS = {
   "4Iev3QkxQoZrpfjaYGnwxKHWnXv1": "improving",
   SehTYcFFmbeyz84vT7Ct1DmqB6J3: "improving",
@@ -43,6 +32,7 @@ const SEEDED_USER_TRENDS = {
   SK0v6biv6sVxWFmYYTteA5Snq583: "stable",
   tlzjTO1BpLWYlDk4khOYV8ZYDwW2: "stable",
   aE0FcUx9B9Pt0Gt8wjCH9BPf0W02: "improving",
+  pZWUaFWrxnbHox5USIQOyuUyMAH3: "improving",
 };
 
 function getBehaviorTasks(tasks = []) {
@@ -331,10 +321,7 @@ export default function AdminDashboard() {
 
       try {
         const idToken = await user.getIdToken();
-        const params = new URLSearchParams({
-          uids: DEMO_REPORT_UIDS.join(","),
-        });
-        const response = await fetch(`/api/admin/user-task-report?${params}`, {
+        const response = await fetch("/api/admin/user-task-report", {
           headers: {
             Authorization: `Bearer ${idToken}`,
           },

@@ -18,6 +18,7 @@ const SEEDED_USER_TRENDS = {
   SK0v6biv6sVxWFmYYTteA5Snq583: "stable",
   tlzjTO1BpLWYlDk4khOYV8ZYDwW2: "stable",
   aE0FcUx9B9Pt0Gt8wjCH9BPf0W02: "improving",
+  pZWUaFWrxnbHox5USIQOyuUyMAH3: "improving",
 };
 
 function isQuotaError(error) {

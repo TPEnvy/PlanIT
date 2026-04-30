@@ -73,6 +73,10 @@ const DEMO_BLOCK_SPLIT_COVERAGE = {
     splitTitle: "morning cooking prep",
     blockTitle: "sales and expense log",
   },
+  pZWUaFWrxnbHox5USIQOyuUyMAH3: {
+    splitTitle: "laundry and folding",
+    blockTitle: "grocery and meal planning",
+  },
 };
 
 function printUsage() {
