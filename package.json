@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "import:history": "node scripts/import_realistic_task_history.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "node railway-server.js"
