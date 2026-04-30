@@ -261,6 +261,9 @@ export default function TaskDetail() {
     typeof task?.priorityScore === "number" ? task.priorityScore : null;
   const rawAdaptiveBoost =
     patternStats?.adaptiveBoost ?? task?.adaptiveBoost ?? null;
+  const logisticRegressionRisk =
+    patternStats?.risk_lr ?? patternStats?.riskLr ?? null;
+  const xgBoostRisk = patternStats?.risk_xgb ?? patternStats?.riskXgb ?? null;
 
   const isFinalized = isResolvedTask(task);
 
@@ -820,7 +823,15 @@ export default function TaskDetail() {
                         value={formatPercent(patternStats?.completion_rate)}
                       />
                       <LabelValue
-                        label="ML risk score"
+                        label="Logistic regression risk"
+                        value={formatScore(logisticRegressionRisk, 2)}
+                      />
+                      <LabelValue
+                        label="XGBoost risk"
+                        value={formatScore(xgBoostRisk, 2)}
+                      />
+                      <LabelValue
+                        label="Combined ML risk"
                         value={
                           patternStats?.mlRiskScore != null
                             ? Number(patternStats.mlRiskScore).toFixed(2)
