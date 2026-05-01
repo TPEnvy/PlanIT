@@ -85,7 +85,54 @@ function average(values) {
   );
 }
 
+function getWeekQuality(completionRate) {
+  const rate = toNumber(completionRate);
+  if (rate == null) {
+    return {
+      status: "no_data",
+      label: "No data",
+      explanation: "No completed or missed tasks were available for this window.",
+    };
+  }
+
+  if (rate >= 85) {
+    return {
+      status: "good_week",
+      label: "Good week",
+      explanation: `Completion rate is ${rate}%, which meets the good-week mark of 85% or higher.`,
+    };
+  }
+
+  return {
+    status: "bad_week",
+    label: "Bad week",
+    explanation: `Completion rate is ${rate}%, which is below the good-week mark of 85%.`,
+  };
+}
+
+function getDeltaExplanation(delta, day1To6, day7To12, trend) {
+  if (delta == null) {
+    return "Not enough decided tasks to compare Day 1-6 with Day 7-12.";
+  }
+
+  const absoluteDelta = Math.abs(delta);
+  const stableNote =
+    trend === "stable" ? " The system still marks this as stable because it is within 4 percentage points." : "";
+
+  if (delta > 0) {
+    return `Day 7-12 is ${absoluteDelta} percentage point${absoluteDelta === 1 ? "" : "s"} higher than Day 1-6 (${day7To12.completionRate}% vs ${day1To6.completionRate}%).${stableNote}`;
+  }
+
+  if (delta < 0) {
+    return `Day 7-12 is ${absoluteDelta} percentage point${absoluteDelta === 1 ? "" : "s"} lower than Day 1-6 (${day7To12.completionRate}% vs ${day1To6.completionRate}%).${stableNote}`;
+  }
+
+  return `Day 7-12 is the same as Day 1-6 (${day7To12.completionRate}% vs ${day1To6.completionRate}%).${stableNote}`;
+}
+
 function serializeWindow(window = {}) {
+  const completionRate = toNumber(window.completionRate);
+
   return {
     label: window.label || "",
     dates: Array.isArray(window.dates) ? window.dates : [],
@@ -94,9 +141,10 @@ function serializeWindow(window = {}) {
     missed: toNumber(window.missed, 0),
     pending: toNumber(window.pending, 0),
     decided: toNumber(window.decided, 0),
-    completionRate: toNumber(window.completionRate),
+    completionRate,
     averageActualMinutes: toNumber(window.averageActualMinutes),
     averageEstimatedMinutes: toNumber(window.averageEstimatedMinutes),
+    quality: getWeekQuality(completionRate),
   };
 }
 
@@ -105,6 +153,8 @@ function serializeSummary(userRecord, summarySnap) {
   const day1To6 = serializeWindow(summary?.day1To6);
   const day7To12 = serializeWindow(summary?.day7To12);
   const totals = serializeWindow(summary?.totals);
+  const delta = toNumber(summary?.delta);
+  const trend = summary?.trend || "not_enough_data";
 
   return {
     uid: userRecord.uid,
@@ -120,9 +170,10 @@ function serializeSummary(userRecord, summarySnap) {
     day1To6,
     day7To12,
     totals,
-    delta: toNumber(summary?.delta),
-    trend: summary?.trend || "not_enough_data",
+    delta,
+    trend,
     trendLabel: summary?.trendLabel || "No summary yet",
+    deltaExplanation: getDeltaExplanation(delta, day1To6, day7To12, trend),
   };
 }
 
@@ -200,6 +251,13 @@ function buildTotals(users) {
       summary.noImprovement += user.trend === "no_improvement" ? 1 : 0;
       summary.stable += user.trend === "stable" ? 1 : 0;
       summary.notEnoughData += user.trend === "not_enough_data" ? 1 : 0;
+      summary.goodDay1To6 +=
+        user.day1To6.quality.status === "good_week" ? 1 : 0;
+      summary.badDay1To6 += user.day1To6.quality.status === "bad_week" ? 1 : 0;
+      summary.goodDay7To12 +=
+        user.day7To12.quality.status === "good_week" ? 1 : 0;
+      summary.badDay7To12 +=
+        user.day7To12.quality.status === "bad_week" ? 1 : 0;
       return summary;
     },
     {
@@ -214,6 +272,10 @@ function buildTotals(users) {
       noImprovement: 0,
       stable: 0,
       notEnoughData: 0,
+      goodDay1To6: 0,
+      badDay1To6: 0,
+      goodDay7To12: 0,
+      badDay7To12: 0,
     }
   );
 

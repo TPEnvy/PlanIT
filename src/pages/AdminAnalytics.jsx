@@ -13,6 +13,12 @@ const trendStyles = {
   not_enough_data: "border-gray-200 bg-gray-50 text-gray-600",
 };
 
+const weekQualityStyles = {
+  good_week: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  bad_week: "border-red-200 bg-red-50 text-red-700",
+  no_data: "border-gray-200 bg-gray-50 text-gray-600",
+};
+
 function formatPercent(value) {
   return value == null ? "N/A" : `${value}%`;
 }
@@ -47,6 +53,20 @@ function TrendPill({ trend, label }) {
       className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${classes}`}
     >
       {label || "No summary yet"}
+    </span>
+  );
+}
+
+function WeekQualityPill({ quality }) {
+  const classes =
+    weekQualityStyles[quality?.status] || weekQualityStyles.no_data;
+
+  return (
+    <span
+      className={`inline-flex whitespace-nowrap rounded-full border px-2 py-1 text-xs font-semibold ${classes}`}
+      title={quality?.explanation || ""}
+    >
+      {quality?.label || "No data"}
     </span>
   );
 }
@@ -169,12 +189,16 @@ export default function AdminAnalytics() {
                   <SummaryTile
                     label="Avg Day 1-6"
                     value={formatPercent(totals.averageDay1To6CompletionRate)}
-                    note="Completion average"
+                    note={`${formatNumber(totals.goodDay1To6)} good, ${formatNumber(
+                      totals.badDay1To6
+                    )} bad`}
                   />
                   <SummaryTile
                     label="Avg Day 7-12"
                     value={formatPercent(totals.averageDay7To12CompletionRate)}
-                    note="Completion average"
+                    note={`${formatNumber(totals.goodDay7To12)} good, ${formatNumber(
+                      totals.badDay7To12
+                    )} bad`}
                   />
                   <SummaryTile
                     label="Avg Change"
@@ -197,8 +221,11 @@ export default function AdminAnalytics() {
                           <th className="px-4 py-3 text-right">Tasks</th>
                           <th className="px-4 py-3 text-right">Missed</th>
                           <th className="px-4 py-3 text-right">Day 1-6 Avg</th>
+                          <th className="px-4 py-3">Day 1-6 Week</th>
                           <th className="px-4 py-3 text-right">Day 7-12 Avg</th>
+                          <th className="px-4 py-3">Day 7-12 Week</th>
                           <th className="px-4 py-3 text-right">Change</th>
+                          <th className="px-4 py-3">Why</th>
                           <th className="px-4 py-3">Trend</th>
                           <th className="px-4 py-3">Coverage</th>
                         </tr>
@@ -225,11 +252,20 @@ export default function AdminAnalytics() {
                             <td className="px-4 py-3 text-right">
                               {formatPercent(entry.day1To6?.completionRate)}
                             </td>
+                            <td className="px-4 py-3">
+                              <WeekQualityPill quality={entry.day1To6?.quality} />
+                            </td>
                             <td className="px-4 py-3 text-right">
                               {formatPercent(entry.day7To12?.completionRate)}
                             </td>
+                            <td className="px-4 py-3">
+                              <WeekQualityPill quality={entry.day7To12?.quality} />
+                            </td>
                             <td className="px-4 py-3 text-right font-semibold">
                               {formatDelta(entry.delta)}
+                            </td>
+                            <td className="max-w-[260px] px-4 py-3 text-xs leading-5 text-gray-600">
+                              {entry.deltaExplanation}
                             </td>
                             <td className="px-4 py-3">
                               <TrendPill
