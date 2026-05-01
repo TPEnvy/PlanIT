@@ -287,7 +287,8 @@ export default async function handler(req, res) {
     if (
       error?.code === "auth/id-token-expired" ||
       error?.code === "auth/argument-error" ||
-      String(error?.code || "").startsWith("auth/")
+      String(error?.code || "").startsWith("auth/") ||
+      /missing bearer token/i.test(String(error?.message || ""))
     ) {
       return res.status(401).json({
         code: "AUTH_REQUIRED",

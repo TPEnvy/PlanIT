@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import adminAnalyticsSummaryHandler from "./api/admin/user-analytics-summary.js";
 import adminReportHandler from "./api/admin/user-task-report.js";
 import scheduledWriteHandler from "./api/tasks/scheduled-write.js";
 import { invokeJsonHandler } from "./api/_lib/invokeHandler.js";
@@ -10,6 +11,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DIST_DIR = path.join(__dirname, "dist");
 const SCHEDULED_WRITE_API_ROUTE = "/api/tasks/scheduled-write";
+const ADMIN_ANALYTICS_SUMMARY_API_ROUTE = "/api/admin/user-analytics-summary";
 const ADMIN_REPORT_API_ROUTE = "/api/admin/user-task-report";
 
 const CONTENT_TYPES = {
@@ -118,6 +120,19 @@ const server = http.createServer(async (req, res) => {
 
     if (requestUrl.pathname === ADMIN_REPORT_API_ROUTE) {
       const adapted = await invokeJsonHandler(adminReportHandler, {
+        method: req.method,
+        headers: normalizeHeaders(req.headers),
+        query: Object.fromEntries(requestUrl.searchParams.entries()),
+      });
+
+      setHeaders(res, adapted.headers);
+      res.writeHead(adapted.statusCode);
+      res.end(adapted.body);
+      return;
+    }
+
+    if (requestUrl.pathname === ADMIN_ANALYTICS_SUMMARY_API_ROUTE) {
+      const adapted = await invokeJsonHandler(adminAnalyticsSummaryHandler, {
         method: req.method,
         headers: normalizeHeaders(req.headers),
         query: Object.fromEntries(requestUrl.searchParams.entries()),
