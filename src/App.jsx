@@ -14,6 +14,7 @@ import EditTask from "./pages/EditTask";
 import SplitTask from "./pages/SplitTask";   // ✅ NEW
 import Tutorial from "./pages/Tutorial";
 import AdminDashboard from "./pages/AdminDashboard";
+import AdminAnalytics from "./pages/AdminAnalytics";
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -46,6 +47,15 @@ export default function App() {
           element={
             <PrivateRoute>
               <AdminDashboard />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/admin/analytics"
+          element={
+            <PrivateRoute>
+              <AdminAnalytics />
             </PrivateRoute>
           }
         />

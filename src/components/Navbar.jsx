@@ -14,6 +14,7 @@ export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const isAdminPage = location.pathname.startsWith("/admin");
+  const isAdminAnalytics = location.pathname === "/admin/analytics";
 
   useEffect(() => {
     setNotifOpen(false);
@@ -158,9 +159,28 @@ export default function Navbar() {
 
         <div className="hidden items-center gap-4 text-sm sm:flex">
           {isAdminPage && (
-            <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
-              Admin Dashboard
-            </span>
+            <>
+              <Link
+                to="/admin"
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                  !isAdminAnalytics
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-transparent text-gray-600 hover:bg-emerald-50 hover:text-emerald-700"
+                }`}
+              >
+                Admin Dashboard
+              </Link>
+              <Link
+                to="/admin/analytics"
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                  isAdminAnalytics
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-transparent text-gray-600 hover:bg-emerald-50 hover:text-emerald-700"
+                }`}
+              >
+                Analytics
+              </Link>
+            </>
           )}
 
           {user && !isAdminPage && (
@@ -233,6 +253,34 @@ export default function Navbar() {
                 {user.email}
               </div>
             </div>
+          )}
+
+          {user && isAdminPage && (
+            <>
+              <Link
+                to="/admin"
+                onClick={() => setMobileOpen(false)}
+                className={`block rounded-xl px-3 py-2 transition ${
+                  !isAdminAnalytics
+                    ? "bg-emerald-50 font-semibold text-emerald-800"
+                    : "text-emerald-800 hover:bg-emerald-50"
+                }`}
+              >
+                Admin Dashboard
+              </Link>
+
+              <Link
+                to="/admin/analytics"
+                onClick={() => setMobileOpen(false)}
+                className={`block rounded-xl px-3 py-2 transition ${
+                  isAdminAnalytics
+                    ? "bg-emerald-50 font-semibold text-emerald-800"
+                    : "text-emerald-800 hover:bg-emerald-50"
+                }`}
+              >
+                Analytics
+              </Link>
+            </>
           )}
 
           {user && !isAdminPage && (

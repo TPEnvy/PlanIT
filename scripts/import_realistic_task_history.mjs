@@ -8,6 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { admin, getAdminDb } from "../api/_lib/firebaseAdmin.js";
+import { buildTaskWindowSummary } from "./_task_window_summary.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1432,6 +1433,28 @@ async function writeToFirestore(dataset) {
       batch.set(
         db.doc(`users/${payload.userId}/notifications/${documentId}`),
         payload
+      )
+    );
+  });
+
+  const tasksByUser = new Map();
+  dataset.tasks.forEach((task) => {
+    if (!tasksByUser.has(task.userId)) {
+      tasksByUser.set(task.userId, []);
+    }
+
+    tasksByUser.get(task.userId).push(task);
+  });
+
+  tasksByUser.forEach((userTasks, userId) => {
+    writes.push((batch) =>
+      batch.set(
+        db.doc(`users/${userId}/analytics/task-window-summary`),
+        {
+          ...buildTaskWindowSummary(userTasks, userId),
+          generatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
       )
     );
   });

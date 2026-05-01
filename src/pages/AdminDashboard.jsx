@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import PageTransition from "../components/PageTransition";
 import { useAuth } from "../contexts/AuthContext";
@@ -447,13 +448,21 @@ export default function AdminDashboard() {
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="self-start rounded-lg border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 shadow-sm transition hover:bg-emerald-50 lg:self-auto"
-            >
-              Refresh report
-            </button>
+            <div className="flex flex-wrap gap-2 self-start lg:self-auto">
+              <Link
+                to="/admin/analytics"
+                className="rounded-lg border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 shadow-sm transition hover:bg-emerald-50"
+              >
+                Low-read analytics
+              </Link>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="rounded-lg border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 shadow-sm transition hover:bg-emerald-50"
+              >
+                Refresh report
+              </button>
+            </div>
           </header>
 
           {loading ? (
