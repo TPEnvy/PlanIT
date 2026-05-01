@@ -15,6 +15,7 @@ export default function Navbar() {
   const location = useLocation();
   const isAdminPage = location.pathname.startsWith("/admin");
   const isAdminAnalytics = location.pathname === "/admin/analytics";
+  const isAdminThesis = location.pathname === "/admin/thesis";
 
   useEffect(() => {
     setNotifOpen(false);
@@ -180,6 +181,16 @@ export default function Navbar() {
               >
                 Analytics
               </Link>
+              <Link
+                to="/admin/thesis"
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                  isAdminThesis
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-transparent text-gray-600 hover:bg-emerald-50 hover:text-emerald-700"
+                }`}
+              >
+                Thesis
+              </Link>
             </>
           )}
 
@@ -279,6 +290,18 @@ export default function Navbar() {
                 }`}
               >
                 Analytics
+              </Link>
+
+              <Link
+                to="/admin/thesis"
+                onClick={() => setMobileOpen(false)}
+                className={`block rounded-xl px-3 py-2 transition ${
+                  isAdminThesis
+                    ? "bg-emerald-50 font-semibold text-emerald-800"
+                    : "text-emerald-800 hover:bg-emerald-50"
+                }`}
+              >
+                Thesis
               </Link>
             </>
           )}

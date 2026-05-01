@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import adminAnalyticsSummaryHandler from "./api/admin/user-analytics-summary.js";
 import adminReportHandler from "./api/admin/user-task-report.js";
+import thesisAssistantHandler from "./api/admin/thesis-assistant.js";
 import scheduledWriteHandler from "./api/tasks/scheduled-write.js";
 import { invokeJsonHandler } from "./api/_lib/invokeHandler.js";
 
@@ -13,6 +14,7 @@ const DIST_DIR = path.join(__dirname, "dist");
 const SCHEDULED_WRITE_API_ROUTE = "/api/tasks/scheduled-write";
 const ADMIN_ANALYTICS_SUMMARY_API_ROUTE = "/api/admin/user-analytics-summary";
 const ADMIN_REPORT_API_ROUTE = "/api/admin/user-task-report";
+const THESIS_ASSISTANT_API_ROUTE = "/api/admin/thesis-assistant";
 
 const CONTENT_TYPES = {
   ".css": "text/css; charset=utf-8",
@@ -136,6 +138,23 @@ const server = http.createServer(async (req, res) => {
         method: req.method,
         headers: normalizeHeaders(req.headers),
         query: Object.fromEntries(requestUrl.searchParams.entries()),
+      });
+
+      setHeaders(res, adapted.headers);
+      res.writeHead(adapted.statusCode);
+      res.end(adapted.body);
+      return;
+    }
+
+    if (requestUrl.pathname === THESIS_ASSISTANT_API_ROUTE) {
+      const body = ["POST", "PUT", "PATCH"].includes(req.method || "")
+        ? await readJsonBody(req)
+        : {};
+      const adapted = await invokeJsonHandler(thesisAssistantHandler, {
+        method: req.method,
+        headers: normalizeHeaders(req.headers),
+        query: Object.fromEntries(requestUrl.searchParams.entries()),
+        body,
       });
 
       setHeaders(res, adapted.headers);
