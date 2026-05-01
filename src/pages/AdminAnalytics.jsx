@@ -19,6 +19,13 @@ const weekQualityStyles = {
   no_data: "border-gray-200 bg-gray-50 text-gray-600",
 };
 
+const weeklyStatusStyles = {
+  good: "bg-emerald-100 text-emerald-800",
+  bad: "bg-red-100 text-red-700",
+  neutral: "bg-yellow-100 text-yellow-800",
+  none: "bg-gray-100 text-gray-700",
+};
+
 function formatPercent(value) {
   return value == null ? "N/A" : `${value}%`;
 }
@@ -68,6 +75,136 @@ function WeekQualityPill({ quality }) {
     >
       {quality?.label || "No data"}
     </span>
+  );
+}
+
+function WeeklyProgressCard({ entry }) {
+  const weeks = entry.weeklyProgress || [];
+
+  return (
+    <article className="rounded-lg border border-emerald-100 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="truncate text-sm font-semibold text-gray-900">
+            {entry.email || entry.displayName || "No email"}
+          </h3>
+          <p className="mt-1 truncate text-xs text-gray-500">{entry.uid}</p>
+        </div>
+        <TrendPill trend={entry.trend} label={entry.trendLabel} />
+      </div>
+
+      {weeks.length === 0 ? (
+        <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 px-3 py-3 text-xs text-gray-600">
+          No weekly progress summary yet. Run the analytics summary writer after
+          importing this user's task history.
+        </div>
+      ) : (
+        <div className="mt-4 space-y-4">
+          {weeks.map((week) => {
+            const maxDayValue = Math.max(
+              1,
+              ...week.days.map((day) => Math.max(day.completed, day.missed))
+            );
+            const statusClass =
+              weeklyStatusStyles[week.status] || weeklyStatusStyles.none;
+
+            return (
+              <div
+                key={week.weekKey}
+                className="rounded-lg border border-gray-100 bg-gray-50 p-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-xs font-semibold text-gray-900">
+                      {week.label || `${week.startDate} to ${week.endDate}`}
+                    </div>
+                    <div className="mt-1 text-[11px] text-gray-500">
+                      {week.message}
+                    </div>
+                  </div>
+                  <span
+                    className={`rounded-full px-2 py-1 text-[11px] font-semibold ${statusClass}`}
+                  >
+                    {week.statusLabel}
+                  </span>
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-3 text-xs">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-800">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                    Completed: <strong>{week.completedTotal}</strong>
+                  </span>
+                  <span className="inline-flex items-center gap-2 rounded-full bg-red-50 px-2.5 py-1 text-red-700">
+                    <span className="h-2 w-2 rounded-full bg-red-400" />
+                    Missed: <strong>{week.missedTotal}</strong>
+                  </span>
+                  <span className="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-gray-600">
+                    Rate: <strong className="ml-1">{formatPercent(week.completionRate)}</strong>
+                  </span>
+                </div>
+
+                <div className="mt-4">
+                  <div className="flex h-28 items-end gap-2 border-b border-gray-200 pb-2">
+                    {week.days.map((day) => {
+                      const completedHeight =
+                        day.completed === 0
+                          ? "10%"
+                          : `${Math.max(18, (day.completed / maxDayValue) * 100)}%`;
+                      const missedHeight =
+                        day.missed === 0
+                          ? "10%"
+                          : `${Math.max(18, (day.missed / maxDayValue) * 100)}%`;
+
+                      return (
+                        <div
+                          key={day.key || day.label}
+                          className="flex h-full flex-1 flex-col items-center justify-end gap-1"
+                        >
+                          <div className="h-4 text-[10px] text-gray-400">
+                            {day.completed + day.missed > 0
+                              ? day.completed + day.missed
+                              : ""}
+                          </div>
+                          <div className="flex min-h-[70px] w-full items-end justify-center gap-1">
+                            <div
+                              className={`min-h-[8px] w-3 rounded-t ${
+                                day.completed > 0 ? "bg-emerald-500" : "bg-emerald-100"
+                              }`}
+                              style={{ height: completedHeight }}
+                              title={`${day.label}: ${day.completed} completed`}
+                            />
+                            <div
+                              className={`min-h-[8px] w-3 rounded-t ${
+                                day.missed > 0 ? "bg-red-400" : "bg-red-100"
+                              }`}
+                              style={{ height: missedHeight }}
+                              title={`${day.label}: ${day.missed} missed`}
+                            />
+                          </div>
+                          <div className="text-[10px] font-semibold text-gray-500">
+                            {day.label}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-2 flex gap-4 text-[11px] text-gray-500">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />
+                      Completed
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-2.5 w-2.5 rounded-sm bg-red-400" />
+                      Missed
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </article>
   );
 }
 
@@ -290,6 +427,27 @@ export default function AdminAnalytics() {
                     {payload.readStrategy}
                   </p>
                 )}
+
+                <section className="mt-8">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h2 className="text-lg font-semibold text-gray-900">
+                        Weekly Progress by User
+                      </h2>
+                      <p className="mt-1 text-sm text-gray-600">
+                        Monday to Sunday completed and missed task activity,
+                        summarized per user from the same low-read analytics
+                        document.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                    {sortedUsers.map((entry) => (
+                      <WeeklyProgressCard key={entry.uid} entry={entry} />
+                    ))}
+                  </div>
+                </section>
               </>
             )}
           </section>

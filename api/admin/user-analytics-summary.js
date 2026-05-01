@@ -148,6 +148,33 @@ function serializeWindow(window = {}) {
   };
 }
 
+function serializeWeeklyProgress(weeks = []) {
+  if (!Array.isArray(weeks)) return [];
+
+  return weeks.map((week) => ({
+    weekKey: week.weekKey || week.startDate || "",
+    label: week.label || "",
+    startDate: week.startDate || null,
+    endDate: week.endDate || null,
+    days: Array.isArray(week.days)
+      ? week.days.map((day) => ({
+          label: day.label || "",
+          key: day.key || "",
+          completed: toNumber(day.completed, 0),
+          missed: toNumber(day.missed, 0),
+        }))
+      : [],
+    completedTotal: toNumber(week.completedTotal, 0),
+    missedTotal: toNumber(week.missedTotal, 0),
+    totalActivity: toNumber(week.totalActivity, 0),
+    completionRate: toNumber(week.completionRate),
+    status: week.status || "none",
+    statusLabel: week.statusLabel || "No data yet",
+    message:
+      week.message || "No completed or missed tasks recorded for this week yet.",
+  }));
+}
+
 function serializeSummary(userRecord, summarySnap) {
   const summary = summarySnap.exists ? summarySnap.data() || {} : null;
   const day1To6 = serializeWindow(summary?.day1To6);
@@ -169,6 +196,7 @@ function serializeSummary(userRecord, summarySnap) {
     observedDayCount: toNumber(summary?.observedDayCount, 0),
     day1To6,
     day7To12,
+    weeklyProgress: serializeWeeklyProgress(summary?.weeklyProgress),
     totals,
     delta,
     trend,

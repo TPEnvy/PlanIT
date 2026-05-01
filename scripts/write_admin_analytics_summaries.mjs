@@ -8,7 +8,7 @@ import { buildTaskWindowSummary } from "./_task_window_summary.mjs";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
-const dataDir = path.join(projectRoot, "data");
+const dataDir = path.resolve(process.env.DATA_DIR || path.join(projectRoot, "data"));
 
 async function readJson(filePath) {
   const raw = await fs.readFile(filePath, "utf8");
