@@ -15,7 +15,6 @@ import SplitTask from "./pages/SplitTask";   // ✅ NEW
 import Tutorial from "./pages/Tutorial";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminAnalytics from "./pages/AdminAnalytics";
-import AdminThesisAssistant from "./pages/AdminThesisAssistant";
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -57,15 +56,6 @@ export default function App() {
           element={
             <PrivateRoute>
               <AdminAnalytics />
-            </PrivateRoute>
-          }
-        />
-
-        <Route
-          path="/admin/thesis"
-          element={
-            <PrivateRoute>
-              <AdminThesisAssistant />
             </PrivateRoute>
           }
         />
