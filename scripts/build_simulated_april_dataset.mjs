@@ -2554,7 +2554,7 @@ const USER_SCENARIOS = {
   default: {
     label: "Illustrative Business Administration student improvement dataset",
     description:
-      "Simulated April 16 to April 27 Business Administration student routine showing gradual improvement while using PlanIT. This is synthetic data for demo/thesis illustration, not a real-user log.",
+      "Simulated April 16 to April 27 Business Administration student routine showing gradual improvement while using PlanIT. This is synthetic data for study illustration, not a real-user log.",
     taskTemplates: BUSINESS_ADMIN_TASK_TEMPLATES,
     dayPlans: BUSINESS_ADMIN_DAY_PLANS,
   },
@@ -2569,7 +2569,7 @@ const USER_SCENARIOS = {
   "4Iev3QkxQoZrpfjaYGnwxKHWnXv1": {
     label: "Illustrative Subway team leader improvement dataset",
     description:
-      "Simulated April 16 to April 27 Subway team leader routine showing gradual improvement while using PlanIT. This is synthetic data for demo/thesis illustration, not a real-user log.",
+      "Simulated April 16 to April 27 Subway team leader routine showing gradual improvement while using PlanIT. This is synthetic data for study illustration, not a real-user log.",
     taskTemplates: SUBWAY_TEAM_LEADER_TASK_TEMPLATES,
     dayPlans: SUBWAY_TEAM_LEADER_DAY_PLANS,
   },

@@ -118,7 +118,7 @@ function getStatus(task = {}) {
 }
 
 function isBehaviorTask(task = {}) {
-  return task.demoCoverageHistory !== true && task.demoCoverageCandidate !== true;
+  return task.coverageHistory !== true && task.coverageCandidate !== true;
 }
 
 function roundRate(completed, missed) {

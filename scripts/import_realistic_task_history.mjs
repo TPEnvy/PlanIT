@@ -36,7 +36,7 @@ const LOCAL_ML_PYTHON = path.join(
 const RECOVERED_PREVENT_NEW_TASK_STORIES = {
   oTf9ZUVQ6XQx0plx6X3G7r5YImS2: ["crm data entry cleanup"],
 };
-const DEMO_BLOCK_SPLIT_COVERAGE = {
+const COVERAGE_BLOCK_SPLIT_SCENARIOS = {
   "4Iev3QkxQoZrpfjaYGnwxKHWnXv1": {
     splitTitle: "prepare breading station",
     blockTitle: "change sanitizer buckets",
@@ -445,7 +445,7 @@ function makeSplitTaskEligible(task, options) {
   }
 }
 
-function buildDemoCoverageCandidateTask({
+function buildCoverageCandidateTask({
   userId,
   normalizedTitle,
   title,
@@ -459,7 +459,7 @@ function buildDemoCoverageCandidateTask({
   const endAt = addMinutes(startAt, estimatedMinutes);
   const createdAt = buildDateTime("2026-04-29", kind === "split" ? "08:00" : "08:05", options.tzOffset);
   const id = createFirestoreLikeId(
-    `${userId}|${normalizedTitle}|demo-${kind}-candidate|${date}|${startTime}`
+    `${userId}|${normalizedTitle}|coverage-${kind}-candidate|${date}|${startTime}`
   );
 
   return {
@@ -505,12 +505,12 @@ function buildDemoCoverageCandidateTask({
     splitSegmentCount: null,
     parentTaskId: null,
     pendingTaskCount: null,
-    demoCoverageCandidate: true,
-    demoCoverageKind: kind,
+    coverageCandidate: true,
+    coverageKind: kind,
   };
 }
 
-function buildDemoCoverageMissedTask({
+function buildCoverageMissedTask({
   userId,
   normalizedTitle,
   title,
@@ -525,7 +525,7 @@ function buildDemoCoverageMissedTask({
   const endAt = addMinutes(startAt, estimatedMinutes);
   const createdAt = addMinutes(startAt, -45);
   const id = createFirestoreLikeId(
-    `${userId}|${normalizedTitle}|demo-${kind}-miss|${index}|${date}|${startTime}`
+    `${userId}|${normalizedTitle}|coverage-${kind}-miss|${index}|${date}|${startTime}`
   );
 
   return {
@@ -570,12 +570,12 @@ function buildDemoCoverageMissedTask({
     isSplitSegment: false,
     splitSegmentCount: null,
     parentTaskId: null,
-    demoCoverageHistory: true,
-    demoCoverageKind: kind,
+    coverageHistory: true,
+    coverageKind: kind,
   };
 }
 
-function buildDemoCoverageCompletedTask({
+function buildCoverageCompletedTask({
   userId,
   normalizedTitle,
   title,
@@ -592,7 +592,7 @@ function buildDemoCoverageCompletedTask({
   const completedAt = addMinutes(startAt, actualMinutes);
   const createdAt = addMinutes(startAt, -45);
   const id = createFirestoreLikeId(
-    `${userId}|${normalizedTitle}|demo-${kind}-recovery|${index}|${date}|${startTime}`
+    `${userId}|${normalizedTitle}|coverage-${kind}-recovery|${index}|${date}|${startTime}`
   );
 
   return {
@@ -637,9 +637,9 @@ function buildDemoCoverageCompletedTask({
     isSplitSegment: false,
     splitSegmentCount: null,
     parentTaskId: null,
-    demoCoverageHistory: true,
-    demoCoverageRecovery: true,
-    demoCoverageKind: kind,
+    coverageHistory: true,
+    coverageRecovery: true,
+    coverageKind: kind,
   };
 }
 
@@ -693,7 +693,7 @@ function addRealisticSplitSegments(tasks, options) {
     },
   ];
   const coverageUserId = options.userId || tasks[0]?.userId;
-  const coverage = DEMO_BLOCK_SPLIT_COVERAGE[coverageUserId];
+  const coverage = COVERAGE_BLOCK_SPLIT_SCENARIOS[coverageUserId];
 
   if (coverage?.splitTitle && !coverage.usesExistingSplitPlan) {
     splitPlans.push({
@@ -752,9 +752,9 @@ function addRealisticSplitSegments(tasks, options) {
   return nextTasks;
 }
 
-function addDemoCoverageCandidateTasks(tasks, options) {
+function addCoverageCandidateTasks(tasks, options) {
   const userId = options.userId || tasks[0]?.userId;
-  const coverage = DEMO_BLOCK_SPLIT_COVERAGE[userId];
+  const coverage = COVERAGE_BLOCK_SPLIT_SCENARIOS[userId];
   if (!coverage) return tasks;
 
   const nextTasks = [...tasks];
@@ -769,7 +769,7 @@ function addDemoCoverageCandidateTasks(tasks, options) {
       ["2026-04-28", "13:00"],
       ["2026-04-29", "08:00"],
     ].forEach(([date, startTime], index) => {
-      const missedTask = buildDemoCoverageMissedTask({
+      const missedTask = buildCoverageMissedTask({
         userId,
         normalizedTitle: coverage.splitTitle,
         title: titleFor(coverage.splitTitle),
@@ -793,7 +793,7 @@ function addDemoCoverageCandidateTasks(tasks, options) {
       ["2026-04-29", "17:00"],
       ["2026-04-30", "06:30"],
     ].forEach(([date, startTime], index) => {
-      const completedTask = buildDemoCoverageCompletedTask({
+      const completedTask = buildCoverageCompletedTask({
         userId,
         normalizedTitle: coverage.splitTitle,
         title: titleFor(coverage.splitTitle),
@@ -812,7 +812,7 @@ function addDemoCoverageCandidateTasks(tasks, options) {
       }
     });
 
-    const splitCandidate = buildDemoCoverageCandidateTask({
+    const splitCandidate = buildCoverageCandidateTask({
       userId,
       normalizedTitle: coverage.splitTitle,
       title: titleFor(coverage.splitTitle),
@@ -836,7 +836,7 @@ function addDemoCoverageCandidateTasks(tasks, options) {
       ["2026-04-29", "10:00"],
       ["2026-04-29", "11:00"],
     ].forEach(([date, startTime], index) => {
-      const missedTask = buildDemoCoverageMissedTask({
+      const missedTask = buildCoverageMissedTask({
         userId,
         normalizedTitle: coverage.blockTitle,
         title: titleFor(coverage.blockTitle),
@@ -860,7 +860,7 @@ function addDemoCoverageCandidateTasks(tasks, options) {
       ["2026-04-30", "07:30"],
       ["2026-04-30", "08:30"],
     ].forEach(([date, startTime], index) => {
-      const completedTask = buildDemoCoverageCompletedTask({
+      const completedTask = buildCoverageCompletedTask({
         userId,
         normalizedTitle: coverage.blockTitle,
         title: titleFor(coverage.blockTitle),
@@ -879,7 +879,7 @@ function addDemoCoverageCandidateTasks(tasks, options) {
       }
     });
 
-    const blockCandidate = buildDemoCoverageCandidateTask({
+    const blockCandidate = buildCoverageCandidateTask({
       userId,
       normalizedTitle: coverage.blockTitle,
       title: titleFor(coverage.blockTitle),
@@ -1487,7 +1487,7 @@ async function writeToFirestore(dataset) {
   }
 
   await applyRecoveredPreventNewTaskStories(db, recomputeTargets);
-  await applyDemoBlockSplitCoverage(db, recomputeTargets);
+  await applyBlockSplitCoverage(db, recomputeTargets);
 
   return patternResults;
 }
@@ -1525,11 +1525,11 @@ async function applyRecoveredPreventNewTaskStories(db, recomputeTargets) {
   }
 }
 
-async function applyDemoBlockSplitCoverage(db, recomputeTargets) {
+async function applyBlockSplitCoverage(db, recomputeTargets) {
   const writes = [];
 
   for (const target of recomputeTargets) {
-    const coverage = DEMO_BLOCK_SPLIT_COVERAGE[target.userId];
+    const coverage = COVERAGE_BLOCK_SPLIT_SCENARIOS[target.userId];
     if (!coverage) continue;
 
     const isSplitTarget = target.normalizedTitle === coverage.splitTitle;
@@ -1555,7 +1555,7 @@ async function applyDemoBlockSplitCoverage(db, recomputeTargets) {
         recoveredFromSplitSignal: true,
         recoveredAt: admin.firestore.FieldValue.serverTimestamp(),
         explanation:
-          "Demo coverage met split conditions first; recent completed follow-ups unlocked recovery, so the split signal is tested but no longer active.",
+          "Historical coverage met split conditions first; recent completed follow-ups unlocked recovery, so the split signal is tested but no longer active.",
       });
     }
 
@@ -1573,7 +1573,7 @@ async function applyDemoBlockSplitCoverage(db, recomputeTargets) {
         recoveredFromPreventNewTasks: true,
         recoveredAt: admin.firestore.FieldValue.serverTimestamp(),
         explanation:
-          "Demo coverage met prevent-new-task conditions first; recent completed follow-ups unlocked recovery, so the block signal is tested but no longer active.",
+          "Historical coverage met prevent-new-task conditions first; recent completed follow-ups unlocked recovery, so the block signal is tested but no longer active.",
       });
     }
 
@@ -1612,7 +1612,7 @@ async function main() {
   const baseTasks = input.tasks.map((task, index) =>
     normalizeTask(task, index, options)
   );
-  const tasks = addDemoCoverageCandidateTasks(
+  const tasks = addCoverageCandidateTasks(
     addRealisticSplitSegments(baseTasks, options),
     options
   );

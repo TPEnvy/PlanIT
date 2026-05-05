@@ -101,9 +101,9 @@ function getCompletionRate(completed, missed) {
   return total === 0 ? null : Math.round((completed / total) * 100);
 }
 
-function isDemoCoverageTask(task) {
+function isCoverageTask(task) {
   return (
-    task.demoCoverageHistory === true || task.demoCoverageCandidate === true
+    task.coverageHistory === true || task.coverageCandidate === true
   );
 }
 
@@ -198,7 +198,7 @@ function buildModelBreakdown(pattern) {
 
 function summarizeOutcomes(tasks) {
   const outcomes = tasks
-    .filter((task) => !isDemoCoverageTask(task))
+    .filter((task) => !isCoverageTask(task))
     .map((task) => ({
       ...task,
       resolvedStatus: getStatus(task),
@@ -351,8 +351,8 @@ function serializeTask(docSnap) {
     isSplitSegment: Boolean(task.isSplitSegment),
     segmentIndex: task.segmentIndex || null,
     segmentCount: task.segmentCount || null,
-    demoCoverageHistory: Boolean(task.demoCoverageHistory),
-    demoCoverageCandidate: Boolean(task.demoCoverageCandidate),
+    coverageHistory: Boolean(task.coverageHistory),
+    coverageCandidate: Boolean(task.coverageCandidate),
   };
 }
 
@@ -393,20 +393,16 @@ function serializePattern(docSnap) {
     preventNewTasks: Boolean(pattern.preventNewTasks),
     hasSplitParent: Boolean(pattern.hasSplitParent),
     splitSignalTested: Boolean(
-      pattern.splitSignalTested ||
-        pattern.demoSplitTest ||
-        pattern.recoveredFromSplitSignal
+      pattern.splitSignalTested || pattern.recoveredFromSplitSignal
     ),
     blockSignalTested: Boolean(
-      pattern.blockSignalTested ||
-        pattern.demoPreventNewTasksTest ||
-        pattern.recoveredFromPreventNewTasks
+      pattern.blockSignalTested || pattern.recoveredFromPreventNewTasks
     ),
     recoveredFromSplitSignal: Boolean(pattern.recoveredFromSplitSignal),
     recoveredFromPreventNewTasks: Boolean(
       pattern.recoveredFromPreventNewTasks
     ),
-    demoCoverageEnabled: Boolean(pattern.demoCoverageEnabled),
+    coverageEnabled: Boolean(pattern.coverageEnabled),
     explanation: pattern.explanation || null,
     updatedAt: toIso(pattern.updatedAt),
     modelBreakdown,
@@ -476,7 +472,7 @@ function buildUserReport(userRecord, taskDocs, patternDocs = []) {
 
     return rightDate.getTime() - leftDate.getTime();
   });
-  const tasks = allTasks.filter((task) => !isDemoCoverageTask(task));
+  const tasks = allTasks.filter((task) => !isCoverageTask(task));
 
   const completed = tasks.filter((task) => task.status === "completed").length;
   const missed = tasks.filter((task) => task.status === "missed").length;

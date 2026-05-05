@@ -39,7 +39,7 @@ const SEEDED_USER_TRENDS = {
 
 function getBehaviorTasks(tasks = []) {
   return tasks.filter(
-    (task) => !task.demoCoverageHistory && !task.demoCoverageCandidate
+    (task) => !task.coverageHistory && !task.coverageCandidate
   );
 }
 
