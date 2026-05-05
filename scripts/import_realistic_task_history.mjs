@@ -1537,7 +1537,6 @@ async function applyDemoBlockSplitCoverage(db, recomputeTargets) {
     if (!isSplitTarget && !isBlockTarget) continue;
 
     const patternPatch = {
-      demoCoverageEnabled: true,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
@@ -1571,7 +1570,6 @@ async function applyDemoBlockSplitCoverage(db, recomputeTargets) {
         ),
         pendingTaskCount: Math.max(Number(patternPatch.pendingTaskCount || 0), 1),
         blockSignalTested: true,
-        demoPreventNewTasksTest: true,
         recoveryUnlocked: true,
         recoveredFromPreventNewTasks: true,
         recoveredAt: admin.firestore.FieldValue.serverTimestamp(),
