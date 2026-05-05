@@ -1551,7 +1551,6 @@ async function applyDemoBlockSplitCoverage(db, recomputeTargets) {
         hasSplitParent: true,
         patternHasSplitParent: true,
         splitSignalTested: true,
-        demoSplitTest: true,
         recoveryUnlocked: true,
         recoveredFromSplitSignal: true,
         recoveredAt: admin.firestore.FieldValue.serverTimestamp(),
